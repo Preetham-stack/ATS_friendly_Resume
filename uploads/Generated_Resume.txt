@@ -1,0 +1,6 @@
+# Generated Resume
+
+**Prompt:** Generate a resume for Java developer who is having 2 years of experience in skills java, spring boot, microservices, sql etc
+
+
+This is a placeholder for a generated resume. In a real application, this would be a fully-formatted resume based on the user's prompt.

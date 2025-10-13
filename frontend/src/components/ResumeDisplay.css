@@ -1,0 +1,30 @@
+.resume-display {
+  padding: 20px;
+}
+
+.resume-display h2 {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.resume-content {
+  background-color: #f9f9f9;
+  border: 1px solid #eee;
+  padding: 15px;
+  border-radius: 4px;
+  white-space: pre-wrap; /* Allows text to wrap and preserves whitespace */
+  font-family: monospace;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.download-button {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 10px 15px;
+    background-color: #27ae60;
+    color: white;
+    text-decoration: none;
+    border-radius: 5px;
+    font-weight: bold;
+}

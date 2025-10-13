@@ -1,0 +1,119 @@
+.score-display {
+  text-align: center;
+  padding: 20px;
+}
+
+.score-display.placeholder {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  color: #777;
+}
+
+.score-circle {
+  position: relative;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background-color: #f0f0f0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  margin: 20px auto;
+  border: 5px solid #3498db;
+}
+
+.score-number {
+  font-size: 3em;
+  font-weight: bold;
+  color: #2c3e50;
+}
+
+.score-label {
+  font-size: 1em;
+  color: #555;
+}
+
+.score-feedback {
+  font-style: italic;
+  color: #333;
+  margin-bottom: 25px;
+}
+
+.results-pills {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin-bottom: 30px;
+}
+
+.pill-button {
+  padding: 10px 20px;
+  border-radius: 20px;
+  border: 1px solid #ccc;
+  background-color: #f5f5f5;
+  cursor: pointer;
+  font-weight: bold;
+  text-decoration: none;
+  color: #333;
+  transition: all 0.2s ease-in-out;
+}
+
+.pill-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.pill-button.download {
+  background-color: #27ae60;
+  border-color: #27ae60;
+  color: white;
+}
+
+.pill-button.export {
+  background-color: #8e44ad;
+  border-color: #8e44ad;
+  color: white;
+}
+
+.suggestions-container {
+  display: flex;
+  gap: 20px;
+  text-align: left;
+}
+
+.suggestions-column {
+  flex: 1;
+  background-color: #f9f9f9;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  /* Prevent the column itself from overflowing */
+  min-width: 0;
+}
+
+.suggestions-column h3 {
+  margin-top: 0;
+  color: #2c3e50;
+  border-bottom: 2px solid #3498db;
+  padding-bottom: 10px;
+}
+
+.suggestions-list {
+  list-style-type: none;
+  padding: 0;
+}
+
+.suggestions-list li {
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+  /* UPDATED: Ensures long text wraps and prevents overflow */
+  word-wrap: break-word;
+}
+
+.suggestions-list li:last-child {
+  border-bottom: none;
+}

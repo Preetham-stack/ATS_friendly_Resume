@@ -1,0 +1,8 @@
+Flask
+Flask-Cors
+python-docx
+PyMuPDF
+google-generativeai
+gspread
+oauth2client
+python-dotenv
