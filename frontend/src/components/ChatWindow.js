@@ -2,17 +2,19 @@ import React, { useState, useRef, useEffect } from 'react';
 import './ChatWindow.css';
 
 function ChatWindow({ onAnalysisComplete, onResumeGenerated, resetTrigger }) {
-  const [mode, setMode] = useState('analyze'); // 'analyze' or 'generate'
+  const [mode, setMode] = useState('analyze');
   const [resumeFile, setResumeFile] = useState(null);
+  const [badgeFiles, setBadgeFiles] = useState([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef(null);
+  const badgeInputRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // Effect to reset state when resetTrigger changes
   useEffect(() => {
     setMode('analyze');
     setResumeFile(null);
+    setBadgeFiles([]);
     setInputText('');
     setIsLoading(false);
     if (textareaRef.current) {
@@ -22,15 +24,19 @@ function ChatWindow({ onAnalysisComplete, onResumeGenerated, resetTrigger }) {
 
   const handleFileChange = (event) => {
     const file = event.target.files[0];
-    if (file) {
-      setResumeFile(file);
-    }
-    // Reset the file input so the same file can be re-uploaded
+    if (file) setResumeFile(file);
     event.target.value = null;
   };
 
-  const removeFile = () => {
-    setResumeFile(null);
+  const handleBadgeFileChange = (event) => {
+    const files = Array.from(event.target.files);
+    if (files.length > 0) setBadgeFiles(prev => [...prev, ...files]);
+    event.target.value = null;
+  };
+
+  const removeFile = () => setResumeFile(null);
+  const removeBadgeFile = (index) => {
+    setBadgeFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleTextChange = (event) => {
@@ -42,13 +48,14 @@ function ChatWindow({ onAnalysisComplete, onResumeGenerated, resetTrigger }) {
     }
   };
 
-  const triggerFileSelect = () => {
-    fileInputRef.current.click();
-  };
+  const triggerFileSelect = () => fileInputRef.current.click();
+  const triggerBadgeFileSelect = () => badgeInputRef.current.click();
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setIsLoading(true);
+
+    const formData = new FormData();
 
     if (mode === 'analyze') {
       if (!resumeFile) {
@@ -56,14 +63,12 @@ function ChatWindow({ onAnalysisComplete, onResumeGenerated, resetTrigger }) {
         setIsLoading(false);
         return;
       }
-      const formData = new FormData();
       formData.append('resume', resumeFile);
       formData.append('job_description', inputText);
 
       try {
         const response = await fetch('http://localhost:5000/api/analyze', {
-          method: 'POST',
-          body: formData,
+          method: 'POST', body: formData,
         });
         if (!response.ok) throw new Error('Server responded with an error!');
         const data = await response.json();
@@ -72,18 +77,20 @@ function ChatWindow({ onAnalysisComplete, onResumeGenerated, resetTrigger }) {
         console.error('Error analyzing resume:', error);
         alert('Failed to analyze resume. Please check the console for details.');
       }
-
     } else { // Generate mode
       if (!inputText) {
         alert('Please describe the resume you want to generate in the message box.');
         setIsLoading(false);
         return;
       }
+      formData.append('prompt', inputText);
+      badgeFiles.forEach(file => {
+        formData.append('badges', file);
+      });
+
       try {
         const response = await fetch('http://localhost:5000/api/generate-resume', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: inputText }),
+          method: 'POST', body: formData,
         });
         if (!response.ok) throw new Error('Server responded with an error!');
         const data = await response.json();
@@ -97,39 +104,42 @@ function ChatWindow({ onAnalysisComplete, onResumeGenerated, resetTrigger }) {
     setIsLoading(false);
     setInputText('');
     setResumeFile(null);
-    if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
-    }
+    setBadgeFiles([]);
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
   return (
     <div className="chat-window-container">
       <div className="chat-header">
-        <span
-          onClick={() => setMode('analyze')}
-          className={`mode-option ${mode === 'analyze' ? 'active' : ''}`}>
-          Analyze Resume
-        </span>
+        <span onClick={() => setMode('analyze')} className={`mode-option ${mode === 'analyze' ? 'active' : ''}`}>Analyze Resume</span>
         <span className="mode-separator">|</span>
-        <span
-          onClick={() => setMode('generate')}
-          className={`mode-option ${mode === 'generate' ? 'active' : ''}`}>
-          Generate Resume
-        </span>
+        <span onClick={() => setMode('generate')} className={`mode-option ${mode === 'generate' ? 'active' : ''}`}>Generate Resume</span>
       </div>
 
       <div className="chat-body">
-        {mode === 'analyze' && resumeFile ? (
+        {mode === 'analyze' && resumeFile && (
           <div className="file-display-card">
             <span className="file-icon">📄</span>
             <span className="file-name">{resumeFile.name}</span>
             <button onClick={removeFile} className="remove-file-button">&times;</button>
           </div>
-        ) : (
+        )}
+        {mode === 'generate' && badgeFiles.length > 0 && (
+          <div className="badge-display-area">
+            {badgeFiles.map((file, index) => (
+              <div key={index} className="file-display-card badge-card">
+                <span className="file-icon">🎖️</span>
+                <span className="file-name">{file.name}</span>
+                <button onClick={() => removeBadgeFile(index)} className="remove-file-button">&times;</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {!resumeFile && badgeFiles.length === 0 && (
           <div className="placeholder-text">
             {mode === 'analyze'
-              ? "Use the '+' to upload your resume, paste a job description in the message box, and hit send."
-              : "Describe the resume you want in the message box (e.g., 'a Python developer resume with 3 years of experience') and hit send."
+              ? "Use the '+' to upload your resume, paste a job description, and hit send."
+              : "Use '+' to upload a resume, 🎖️ to add badges, describe the resume, and hit send."
             }
           </div>
         )}
@@ -137,15 +147,12 @@ function ChatWindow({ onAnalysisComplete, onResumeGenerated, resetTrigger }) {
 
       <div className="chat-input-area">
         <form onSubmit={handleSubmit} className="message-form">
-          <button type="button" className="add-file-button" onClick={triggerFileSelect}>
-            +
-          </button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            style={{ display: 'none' }}
-          />
+          <button type="button" className="add-file-button" onClick={triggerFileSelect}>+</button>
+          {mode === 'generate' && (
+            <button type="button" className="add-file-button" onClick={triggerBadgeFileSelect}>🎖️</button>
+          )}
+          <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: 'none' }} accept=".pdf,.docx" />
+          <input type="file" ref={badgeInputRef} onChange={handleBadgeFileChange} style={{ display: 'none' }} accept="image/*" multiple />
           <textarea
             ref={textareaRef}
             className="message-input"

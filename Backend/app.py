@@ -7,14 +7,14 @@ from werkzeug.utils import secure_filename
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from docx import Document
+from docx.shared import Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from dotenv import load_dotenv
 
 # --- Configuration ---
-# Load environment variables from .env file
 load_dotenv()
 
 # --- Gemini API Configuration ---
-# The API key is now loaded from your .env file.
 try:
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
@@ -34,7 +34,7 @@ SHEET_NAME = "ATSFriendlyResume_Export"
 
 # --- Flask App Configuration ---
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'uploads')
-ALLOWED_EXTENSIONS = {'pdf', 'docx'}
+ALLOWED_EXTENSIONS = {'pdf', 'docx', 'png', 'jpg', 'jpeg'}
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -43,14 +43,10 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 # --- Helper Functions ---
-
 def allowed_file(filename):
-    """Checks if the uploaded file has an allowed extension."""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-
 def parse_resume_text(filepath: str) -> str:
-    """Extracts text from a .docx or .pdf file."""
     if filepath.endswith(".docx"):
         try:
             doc = Document(filepath)
@@ -58,58 +54,29 @@ def parse_resume_text(filepath: str) -> str:
         except Exception:
             return ""
     elif filepath.endswith(".pdf"):
-        # This is a placeholder. You would need a library like PyMuPDF for this.
         return "PDF parsing is not fully implemented in this version."
     return ""
 
-
 def create_optimization_prompt(resume_text: str, jd_text: str) -> str:
-    """Generates the detailed prompt for the Gemini agent for ATS optimization."""
     return f'''
     You are an expert ATS (Applicant Tracking System) Optimization AI Agent. Your goal is to analyze the provided resume against the job description and modify the resume content to maximize its ATS score, aiming for 85 or above (out of 100).
 
     You MUST return the response in a single, strictly valid JSON object that adheres to the required schema. DO NOT include any explanatory text, markdown outside of the JSON block, or conversation before or after the JSON.
 
-    ### CRITICAL INSTRUCTIONS:
-    1.  **ATS Score Calculation (0-100):**
-        *   40% Weight: Structural & Formatting Compliance (Standard headings, clean parsing).
-        *   60% Weight: Keyword Match Rate & Relevance (How well skills and experience match the JD).
-        *   Target Score: The final `ats_score` in the JSON MUST be 85+ after optimization.
-    2.  **Modification Rule:** Only make necessary changes to content, wording, and keyword density. Do NOT add entirely fabricated experience. Focus on re-framing existing experience using JD keywords.
-    3.  **Output Format:** Provide the full, optimized resume text as a clean string. List the changes and recommendations separately.
-
-    ### INPUT DATA:
-    <JOB_DESCRIPTION>
-    {jd_text}
-    </JOB_DESCRIPTION>
-
-    <CURRENT_RESUME_TEXT>
-    {resume_text}
-    </CURRENT_RESUME_TEXT>
-
-    ### TASK:
-    1.  Analyze the CURRENT_RESUME_TEXT for ATS compliance and keyword match against the JOB_DESCRIPTION.
-    2.  Generate the OPTIMIZED_RESUME_TEXT by standardizing headers, integrating JD keywords, and cleaning formatting.
-    3.  Calculate the final `ats_score` (must be 85+).
-    4.  List the exact **Modifications Made**.
-    5.  List any remaining **Recommendations** for the user.
-
     ### REQUIRED JSON OUTPUT SCHEMA:
     {{
       "ats_score": <integer>,
       "optimized_resume_text": "<string>",
-      "modifications_made": ["<string>", "<string>", ...],
-      "user_recommendations": ["<string>", "<string>", ...]
+      "modifications_made": ["<string>", ...],
+      "user_recommendations": ["<string>", ...]
     }}
     '''
 
-
 def create_generation_prompt(user_prompt: str) -> str:
-    """Generates the prompt for the Gemini agent to create a new resume."""
     return f'''
     You are a professional resume writer AI. Your task is to generate a complete, well-structured, and ATS-friendly resume based on the user's request.
 
-    You MUST return the response in a single, strictly valid JSON object.
+    You MUST return the response in a single, strictly valid JSON object. Do not include any text, conversation, or markdown characters like ```json before or after the JSON object.
 
     ### USER REQUEST:
     {user_prompt}
@@ -117,32 +84,35 @@ def create_generation_prompt(user_prompt: str) -> str:
     ### TASK:
     1.  Create a full resume based on the user's request.
     2.  The resume should include standard sections: Contact Information, Summary, Skills, Experience, Education, and Projects (if applicable).
-    3.  Ensure the content is professional and uses action verbs.
-    4.  The output must be a single string.
+    3.  After generating the resume text, extract a list of 5-10 key skills mentioned or implied in the generated resume.
 
     ### REQUIRED JSON OUTPUT SCHEMA:
     {{
-      "generated_resume_text": "<string>"
+      "generated_resume_text": "<string>",
+      "skills": ["<string>", "<string>", ...]
     }}
     '''
 
-
 def get_gemini_response(prompt: str) -> dict:
-    """Sends a prompt to the Gemini API and returns the parsed JSON response."""
     if not GEMINI_MODEL:
         return {"error": "Gemini API is not configured."}
     try:
         response = GEMINI_MODEL.generate_content(prompt)
-        # Clean the response to extract only the JSON part
-        cleaned_text = response.text.strip().replace("```json", "").replace("```", "")
+        text = response.text.strip()
+        json_start = text.find('{')
+        json_end = text.rfind('}') + 1
+        if json_start == -1 or json_end == 0:
+            raise ValueError("No JSON object found in the response.")
+        cleaned_text = text[json_start:json_end]
         return json.loads(cleaned_text)
     except Exception as e:
         print(f"Error getting response from Gemini: {e}")
+        problematic_text = response.text if 'response' in locals() else 'N/A'
+        print(f"Problematic response text: {problematic_text}")
         return {"error": f"Failed to get a valid response from the AI model: {e}"}
 
 
 # --- API Endpoints ---
-
 @app.route('/api/analyze', methods=['POST'])
 def analyze_resume_endpoint():
     if not GEMINI_MODEL:
@@ -171,7 +141,6 @@ def analyze_resume_endpoint():
     if "error" in ai_response:
         return jsonify(ai_response), 500
 
-    # Save the optimized resume to a .docx file
     optimized_filename = f"Optimized_{filename.rsplit('.', 1)[0]}.docx"
     optimized_filepath = os.path.join(app.config['UPLOAD_FOLDER'], optimized_filename)
     doc = Document()
@@ -182,17 +151,17 @@ def analyze_resume_endpoint():
 
     return jsonify(ai_response)
 
-
 @app.route('/api/generate-resume', methods=['POST'])
 def generate_resume_endpoint():
     if not GEMINI_MODEL:
         return jsonify({'error': 'AI model is not configured. Please check your API key.'}), 500
 
-    data = request.get_json()
-    prompt_text = data.get('prompt')
+    prompt_text = request.form.get('prompt')
     if not prompt_text:
         return jsonify({'error': 'No prompt provided.'}), 400
 
+    badge_files = request.files.getlist('badges')
+    
     prompt = create_generation_prompt(prompt_text)
     ai_response = get_gemini_response(prompt)
 
@@ -200,17 +169,43 @@ def generate_resume_endpoint():
         return jsonify(ai_response), 500
 
     generated_text = ai_response.get("generated_resume_text", "")
+    generated_skills = ai_response.get("skills", [])
 
-    # Save the generated resume to a .docx file
+    doc = Document()
+
+    # Add badges to the top right FIRST
+    if badge_files:
+        badge_paths = []
+        for bf in badge_files:
+            if bf and allowed_file(bf.filename):
+                badge_filename = secure_filename(bf.filename)
+                badge_path = os.path.join(app.config['UPLOAD_FOLDER'], badge_filename)
+                bf.save(badge_path)
+                badge_paths.append(badge_path)
+        
+        if badge_paths:
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            for bp in badge_paths:
+                run = p.add_run()
+                try:
+                    run.add_picture(bp, height=Inches(0.5))
+                    run.add_text(' ') # Add a space between badges
+                except Exception as e:
+                    print(f"Error adding picture {bp}: {e}")
+
+    # Add the main resume content AFTER the badges
+    for line in generated_text.split('\n'):
+        doc.add_paragraph(line)
+
     generated_filename = "Generated_Resume.docx"
     generated_filepath = os.path.join(app.config['UPLOAD_FOLDER'], generated_filename)
-    doc = Document()
-    doc.add_paragraph(generated_text)
     doc.save(generated_filepath)
 
     return jsonify({
         'content': generated_text,
-        'download_path': f"uploads/{generated_filename}"
+        'download_path': f"uploads/{generated_filename}",
+        'skills': generated_skills
     })
 
 
@@ -227,7 +222,6 @@ def export_to_sheets_endpoint():
 
     data = request.get_json()
 
-    # Prepare a row to insert into the sheet
     row = [
         data.get("ats_score", ""),
         ", ".join(data.get("modifications_made", [])),
@@ -241,10 +235,8 @@ def export_to_sheets_endpoint():
     except Exception as e:
         return jsonify({"error": f"Failed to write to Google Sheet: {e}"}), 500
 
-
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
-    """Serves files from the upload folder for downloading."""
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename, as_attachment=True)
 
 
