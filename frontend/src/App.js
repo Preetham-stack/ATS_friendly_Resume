@@ -10,6 +10,7 @@ function App() {
   const [analysisResult, setAnalysisResult] = useState(null);
   const [generatedResume, setGeneratedResume] = useState(null);
   const [showOptimizedResume, setShowOptimizedResume] = useState(false);
+  const [resetChat, setResetChat] = useState(0); // State to trigger chat window reset
 
   const handleAnalysisComplete = (result) => {
     setGeneratedResume(null);
@@ -21,14 +22,22 @@ function App() {
     setGeneratedResume(resume);
   };
 
+  const handleTitleClick = () => {
+    setAnalysisResult(null);
+    setGeneratedResume(null);
+    setShowOptimizedResume(false);
+    setResetChat(prev => prev + 1); // Increment to trigger reset in ChatWindow
+  };
+
   return (
     <div className="App">
-      <Header />
+      <Header onTitleClick={handleTitleClick} />
       <main className="main-content">
         <div className="chat-container">
           <ChatWindow 
             onAnalysisComplete={handleAnalysisComplete} 
             onResumeGenerated={handleResumeGenerated} 
+            resetTrigger={resetChat}
           />
         </div>
         <div className="results-container">

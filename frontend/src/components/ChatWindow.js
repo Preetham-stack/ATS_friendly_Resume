@@ -1,13 +1,24 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import './ChatWindow.css';
 
-function ChatWindow({ onAnalysisComplete, onResumeGenerated }) {
+function ChatWindow({ onAnalysisComplete, onResumeGenerated, resetTrigger }) {
   const [mode, setMode] = useState('analyze'); // 'analyze' or 'generate'
   const [resumeFile, setResumeFile] = useState(null);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef(null);
   const textareaRef = useRef(null);
+
+  // Effect to reset state when resetTrigger changes
+  useEffect(() => {
+    setMode('analyze');
+    setResumeFile(null);
+    setInputText('');
+    setIsLoading(false);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+  }, [resetTrigger]);
 
   const handleFileChange = (event) => {
     const file = event.target.files[0];
@@ -126,7 +137,7 @@ function ChatWindow({ onAnalysisComplete, onResumeGenerated }) {
 
       <div className="chat-input-area">
         <form onSubmit={handleSubmit} className="message-form">
-          <button type="button" className="add-file-button" onClick={triggerFileSelect} disabled={mode === 'generate'}>
+          <button type="button" className="add-file-button" onClick={triggerFileSelect}>
             +
           </button>
           <input
@@ -134,7 +145,6 @@ function ChatWindow({ onAnalysisComplete, onResumeGenerated }) {
             ref={fileInputRef}
             onChange={handleFileChange}
             style={{ display: 'none' }}
-            accept=".pdf,.docx"
           />
           <textarea
             ref={textareaRef}

@@ -1,10 +1,10 @@
 import React from 'react';
 import './Header.css';
 
-function Header() {
+function Header({ onTitleClick }) {
   return (
     <header className="app-header">
-      <h1>ATS Friendly Resume Creator</h1>
+      <h1 onClick={onTitleClick} style={{ cursor: 'pointer' }}>RAG</h1>
     </header>
   );
 }
