@@ -60,10 +60,12 @@ def parse_resume_text(filepath: str) -> str:
     return ""
 
 
-def create_optimization_prompt(resume_text: str, jd_text: str) -> str:
+def create_optimization_prompt(resume_text: str, jd_text: str, recommendations: str) -> str:
     return f'''
     You are an expert ATS Optimization AI. Analyze the provided resume and job description, then rewrite the resume
     to maximize its ATS score (target score: 85+).
+
+    Incorporate the following specific recommendations for improvement: {recommendations}
 
     Return a **valid JSON only**, with this structure:
     {{
@@ -187,6 +189,7 @@ def update_resume_endpoint():
 
     file = request.files['resume']
     job_description = request.form.get('job_description', '')
+    recommendations = request.form.get('recommendations_for_improvement', '')
 
     if file.filename == '' or not allowed_file(file.filename):
         return jsonify({'error': 'Invalid or no file selected.'}), 400
@@ -199,7 +202,7 @@ def update_resume_endpoint():
     if not resume_text or "parsing is not fully implemented" in resume_text:
         return jsonify({'error': 'Unable to read resume file.'}), 500
 
-    prompt = create_optimization_prompt(resume_text, job_description)
+    prompt = create_optimization_prompt(resume_text, job_description, recommendations)
     ai_response = get_gemini_response(prompt)
 
     if "error" in ai_response:
@@ -211,7 +214,7 @@ def update_resume_endpoint():
     doc.add_paragraph(ai_response.get("optimized_resume_text", ""))
     doc.save(optimized_filepath)
 
-    ai_response['download_path'] = f"uploads/{optimized_filename}"
+    ai_response['download_path'] = f"/uploads/{optimized_filename}"
     return jsonify(ai_response)
 
 
@@ -294,7 +297,7 @@ def generate_resume_endpoint():
 
     return jsonify({
         'content': generated_text,
-        'download_path': f"uploads/{generated_filename}",
+        'download_path': f"/uploads/{generated_filename}",
         'skills': generated_skills
     })
 
