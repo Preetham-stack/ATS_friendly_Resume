@@ -1,0 +1,25 @@
+.profile-dropdown {
+  position: absolute;
+  top: 55px; /* Adjust based on header height */
+  right: 20px;
+  background-color: white;
+  color: #2c3e50;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  padding: 15px;
+  z-index: 1000;
+  width: 240px;
+}
+
+.user-info p {
+  margin: 5px 0;
+  line-height: 1.4;
+  word-wrap: break-word;
+}
+
+.user-name {
+  font-weight: bold;
+  font-size: 1.1em;
+  text-transform: capitalize;
+}
