@@ -9,6 +9,9 @@ from oauth2client.service_account import ServiceAccountCredentials
 from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+import fitz  # PyMuPDF
+import pytesseract
+from PIL import Image
 from dotenv import load_dotenv
 
 # --- Load environment variables ---
@@ -49,14 +52,29 @@ def allowed_file(filename):
 
 
 def parse_resume_text(filepath: str) -> str:
-    if filepath.endswith(".docx"):
+    """Parses text from various file types (docx, pdf, images)."""
+    file_extension = filepath.rsplit('.', 1)[1].lower()
+
+    if file_extension == "docx":
         try:
             doc = Document(filepath)
             return "\n".join([para.text for para in doc.paragraphs])
-        except Exception:
+        except Exception as e:
+            print(f"Error parsing DOCX file {filepath}: {e}")
             return ""
-    elif filepath.endswith(".pdf"):
-        return "PDF parsing is not fully implemented in this version."
+    elif file_extension == "pdf":
+        try:
+            with fitz.open(filepath) as doc:
+                return "".join(page.get_text() for page in doc)
+        except Exception as e:
+            print(f"Error parsing PDF file {filepath}: {e}")
+            return ""
+    elif file_extension in {'png', 'jpg', 'jpeg'}:
+        try:
+            return pytesseract.image_to_string(Image.open(filepath))
+        except Exception as e:
+            print(f"Error performing OCR on image {filepath}: {e}")
+            return ""
     return ""
 
 
@@ -113,22 +131,51 @@ def create_analysis_prompt(resume_text: str, jd_text: str) -> str:
     '''
 
 
-def create_generation_prompt(user_prompt: str) -> str:
+def create_comprehensive_generation_prompt(
+    jd_text: str = "",
+    skills: str = "",
+    user_details: str = "",
+    existing_resume_text: str = ""
+) -> str:
     return f'''
-    You are a professional resume writer AI. Create a complete, structured, and ATS-friendly resume based on:
-    "{user_prompt}"
+    You are a world-class resume writing AI assistant. Your task is to generate or update a resume based on the provided information.
 
-    The resume must use special format markers:
+    **Instructions:**
+    1.  **Analyze Inputs:** Review all provided sections: Job Description, Skills, User Details, and Existing Resume.
+    2.  **Check for Completeness:** If `user_details` are missing but other information (`jd_text`, `skills`, or `existing_resume_text`) is present, you MUST ask for them.
+    3.  **Generate or Update:**
+        - If `existing_resume_text` is provided, update it to align with the `jd_text` and `skills`.
+        - If not, create a new resume from scratch using `jd_text`, `skills`, and `user_details`.
+    4.  **Format Correctly:** The resume text must use these special format markers:
     - [H1] for the name
     - [H2] for major sections (Summary, Experience, Education)
     - [H3] for job titles or sub-sections
     - [BULLET] for bullet points
+    5.  **Calculate ATS Score:** Provide an estimated ATS score for the final generated/updated resume against the job description.
+    6.  **Return JSON:** Your entire output must be a single, valid JSON object.
 
-    Output must be a **single valid JSON object**:
+    **Response Scenarios:**
+
+    **A) If User Details are missing, return this JSON structure:**
     {{
-      "generated_resume_text": "<string>",
-      "skills": ["<string>", "<string>", ...]
+      "status": "clarification_needed",
+      "message": "To create a personalized resume, please provide your details. For example: name, contact number, email, LinkedIn profile, years of experience, previous job titles, and education."
     }}
+
+    **B) If you have enough information, return this JSON structure:**
+    {{
+      "status": "success",
+      "generated_resume_text": "<The full, formatted resume text>",
+      "ats_score": <integer>,
+      "extracted_skills": ["<skill1>", "<skill2>", ...]
+    }}
+
+    ---
+    **Provided Information:**
+    - Job Description: "{jd_text}"
+    - Skills: "{skills}"
+    - User Details: "{user_details}"
+    - Existing Resume: "{existing_resume_text}"
     '''
 
 
@@ -218,28 +265,46 @@ def update_resume_endpoint():
     return jsonify(ai_response)
 
 
-@app.route('/api/generate-resume', methods=['POST'])
+@app.route('/api/generate-resume', methods=['POST'], strict_slashes=False)
 def generate_resume_endpoint():
     if not GEMINI_MODEL:
         return jsonify({'error': 'AI model is not configured.'}), 500
 
-    prompt_text = request.form.get('prompt')
-    if not prompt_text:
-        return jsonify({'error': 'No prompt provided.'}), 400
-
+    # --- Extract all possible inputs ---
+    jd_text = request.form.get('job_description', '')
+    skills = request.form.get('skills', '')
+    user_details = request.form.get('user_details', '')
+    resume_file = request.files.get('resume')
     badge_files = request.files.getlist('badges')
-    prompt = create_generation_prompt(prompt_text)
+    image_files = request.files.getlist('images') # For profile pics or other attachments
+
+    existing_resume_text = ""
+    if resume_file and allowed_file(resume_file.filename):
+        filename = secure_filename(resume_file.filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        resume_file.save(filepath)
+        existing_resume_text = parse_resume_text(filepath)
+
+    # --- Call the new comprehensive prompt ---
+    prompt = create_comprehensive_generation_prompt(
+        jd_text=jd_text,
+        skills=skills,
+        user_details=user_details,
+        existing_resume_text=existing_resume_text
+    )
     ai_response = get_gemini_response(prompt)
 
     if "error" in ai_response:
         return jsonify(ai_response), 500
 
+    # --- Handle conversational response ---
+    if ai_response.get("status") == "clarification_needed":
+        return jsonify(ai_response)
+
     generated_text = ai_response.get("generated_resume_text", "")
-    generated_skills = ai_response.get("skills", [])
+    generated_skills = ai_response.get("extracted_skills", [])
 
     doc = Document()
-
-    # Default font
     style = doc.styles['Normal']
     font = style.font
     font.name = 'Calibri'
@@ -249,7 +314,8 @@ def generate_resume_endpoint():
     if badge_files:
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        for bf in badge_files:
+        # Also consider badges from the original resume if it was an update
+        for bf in badge_files: 
             if bf and allowed_file(bf.filename):
                 badge_filename = secure_filename(bf.filename)
                 badge_path = os.path.join(app.config['UPLOAD_FOLDER'], badge_filename)
@@ -295,14 +361,14 @@ def generate_resume_endpoint():
     generated_filepath = os.path.join(app.config['UPLOAD_FOLDER'], generated_filename)
     doc.save(generated_filepath)
 
-    return jsonify({
-        'content': generated_text,
-        'download_path': f"/uploads/{generated_filename}",
-        'skills': generated_skills
-    })
+    # Add download path and other relevant info to the original AI response
+    ai_response['download_path'] = f"/uploads/{generated_filename}"
+    ai_response['content'] = generated_text # For frontend display if needed
+
+    return jsonify(ai_response)
 
 
-@app.route('/api/export-to-sheets', methods=['POST'])
+@app.route('/api/export-to-sheets', methods=['POST'], strict_slashes=False)
 def export_to_sheets_endpoint():
     try:
         creds_path = os.path.join(BASE_DIR, 'google-sheets-credentials.json')
