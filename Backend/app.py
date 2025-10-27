@@ -20,7 +20,7 @@ try:
     if not api_key:
         raise ValueError("GOOGLE_API_KEY not found in .env file or environment variables.")
     genai.configure(api_key=api_key)
-    GEMINI_MODEL = genai.GenerativeModel('gemini-2.0-flash')  # Updated to latest stable model
+    GEMINI_MODEL = genai.GenerativeModel('gemini-2.5-flash')  # Updated to latest stable model
 except (ValueError, KeyError) as e:
     print(f"FATAL: {e}")
     GEMINI_MODEL = None
@@ -72,6 +72,42 @@ def create_optimization_prompt(resume_text: str, jd_text: str) -> str:
       "modifications_made": ["<string>", ...],
       "user_recommendations": ["<string>", ...]
     }}
+
+    ---
+    Job Description:
+    {jd_text}
+    ---
+    Resume:
+    {resume_text}
+    '''
+
+
+def create_analysis_prompt(resume_text: str, jd_text: str) -> str:
+    return f'''
+    You are an expert ATS Analyzer AI. Your task is to analyze the resume against the provided job description.
+    Do NOT rewrite the resume. Instead, identify what's missing and compare the skills.
+
+    1. Extract all technical skills, tools, and keywords from the Job Description.
+    2. Extract all technical skills and tools from the Resume.
+    3. Calculate a skills matching score as a percentage based on how many skills from the job description are present in the resume.
+
+    Return a **valid JSON only**, with this structure:
+    {{
+      "ats_score_estimation": <integer>,
+      "skills_matching_score": <integer>,
+      "missing_keywords": ["<string>", ...],
+      "feedback": "<string>",
+      "recommendations_for_improvement": ["<string>", ...],
+      "jd_skills": ["<string>", ...],
+      "resume_skills": ["<string>", ...]
+    }}
+
+    ---
+    Job Description:
+    {jd_text}
+    ---
+    Resume:
+    {resume_text}
     '''
 
 
@@ -116,6 +152,33 @@ def get_gemini_response(prompt: str) -> dict:
 # --- API Endpoints ---
 @app.route('/api/analyze', methods=['POST'])
 def analyze_resume_endpoint():
+    if not GEMINI_MODEL:
+        return jsonify({'error': 'AI model not configured. Please check your API key.'}), 500
+
+    if 'resume' not in request.files:
+        return jsonify({'error': 'No resume file provided.'}), 400
+
+    file = request.files['resume']
+    job_description = request.form.get('job_description', '')
+
+    if file.filename == '' or not allowed_file(file.filename):
+        return jsonify({'error': 'Invalid or no file selected.'}), 400
+
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    file.save(filepath)
+
+    resume_text = parse_resume_text(filepath)
+    if not resume_text or "parsing is not fully implemented" in resume_text:
+        return jsonify({'error': 'Unable to read resume file.'}), 500
+
+    prompt = create_analysis_prompt(resume_text, job_description)
+    ai_response = get_gemini_response(prompt)
+
+    return jsonify(ai_response)
+
+@app.route('/api/update-resume', methods=['POST'])
+def update_resume_endpoint():
     if not GEMINI_MODEL:
         return jsonify({'error': 'AI model not configured. Please check your API key.'}), 500
 
