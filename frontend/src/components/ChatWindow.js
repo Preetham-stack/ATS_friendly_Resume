@@ -10,7 +10,6 @@ function ChatWindow({
   handleUpdateResume,
   chatHistory,
   setChatHistory,
-  handleTitleClick // Ensure this prop is passed from App.js
 }) {
   const [mode, setMode] = useState('analyze');
   const [resumeFile, setResumeFile] = useState(null); // For initial upload
@@ -23,13 +22,16 @@ function ChatWindow({
   const chatBodyRef = useRef(null);
 
   useEffect(() => {
-    setMode('analyze');
-    setResumeFile(null);
-    setBadgeFiles([]);
-    setInputText('');
-    setIsLoading(false);
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
+    // This effect should ONLY run when the resetTrigger prop changes.
+    // The check for > 0 ensures it doesn't run on the initial render.
+    if (resetTrigger > 0) { 
+      setResumeFile(null);
+      setBadgeFiles([]);
+      setInputText('');
+      setIsLoading(false);
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
     }
   }, [resetTrigger]);
 
@@ -75,20 +77,60 @@ function ChatWindow({
   const triggerFileSelect = () => fileInputRef.current.click();
   const triggerBadgeFileSelect = () => badgeInputRef.current.click();
 
-  const handleAgentInteraction = (text) => {
+ const handleAgentInteraction = (text) => {
     const lowercasedText = text.toLowerCase();
     
-    // Intent: Add skills
-    if (lowercasedText.startsWith('add skill') || lowercasedText.startsWith('add skills')) {
+    // Most agent interactions require an analysis to be present.
+    if (!analysisResult && (lowercasedText.startsWith('add') || lowercasedText.startsWith('remove') || lowercasedText.includes('update'))) {
+      setChatHistory(prev => [...prev, { type: 'agent', content: "I can do that, but you need to analyze a resume first. Please upload a resume and job description." }]);
+      return true;
+    }
+
+    // Regex to capture action (add/remove), skills, and target (resume/jd)
+    const skillCommandRegex = /^(add|remove) skills? (.*?)(?: to| from)? the (resume|job description|jd|analysis)?$/i;
+    const match = text.match(skillCommandRegex);
+
+    if (match) {
+      const [, action, skillsStr, target] = match;
+      const skills = skillsStr.split(',').map(s => s.trim()).filter(Boolean);
+
+      if (skills.length === 0) {
+        setChatHistory(prev => [...prev, { type: 'agent', content: "Please specify which skills you'd like to " + action + "." }]);
+        return true;
+      }
+
+      const isAdd = action.toLowerCase() === 'add';
+      const targetKey = (target && target.includes('resume')) ? 'resume_skills' : 'jd_skills';
+
+      if (isAdd) {
+        setAnalysisResult(prev => ({
+          ...prev,
+          [targetKey]: [...new Set([...(prev[targetKey] || []), ...skills])]
+        }));
+        setChatHistory(prev => [...prev, { type: 'agent', content: `Okay, I've added the following skills to the ${targetKey === 'resume_skills' ? 'resume' : 'job description'} analysis: ${skills.join(', ')}.` }]);
+      } else {
+        setAnalysisResult(prev => {
+          const currentSkills = prev[targetKey] || [];
+          const skillsToRemoveSet = new Set(skills.map(s => s.toLowerCase()));
+          const newSkills = currentSkills.filter(s => !skillsToRemoveSet.has(s.toLowerCase()));
+          return { ...prev, [targetKey]: newSkills };
+        });
+        setChatHistory(prev => [...prev, { type: 'agent', content: `Done. I've removed the following skills from the ${targetKey === 'resume_skills' ? 'resume' : 'job description'} analysis: ${skills.join(', ')}.` }]);
+      }
+      return true;
+    }
+
+    // Fallback for simple "add skill" without target
+    if (lowercasedText.startsWith('add skill')) {
       const skillsToAdd = text.replace(/add skills?/i, '').trim().split(',').map(s => s.trim()).filter(Boolean);
-      if (skillsToAdd.length > 0 && analysisResult) {
+      if (skillsToAdd.length > 0) {
         setAnalysisResult(prev => ({
           ...prev,
           jd_skills: [...new Set([...(prev.jd_skills || []), ...skillsToAdd])]
         }));
-        setChatHistory(prev => [...prev, { type: 'agent', content: `Okay, I've added the following skills to the analysis: ${skillsToAdd.join(', ')}.` }]);
+        setChatHistory(prev => [...prev, { type: 'agent', content: `Okay, I've added the following skills to the job description analysis: ${skillsToAdd.join(', ')}.` }]);
       } else {
-        setChatHistory(prev => [...prev, { type: 'agent', content: "I can do that, but please provide the skills you want to add, and make sure you've analyzed a resume first." }]);
+        setChatHistory(prev => [...prev, { type: 'agent', content: "Please tell me which skills you'd like to add." }]);
       }
       return true;
     }
@@ -103,7 +145,7 @@ function ChatWindow({
         }));
         setChatHistory(prev => [...prev, { type: 'agent', content: "I've added that to the recommendations." }]);
       } else {
-        setChatHistory(prev => [...prev, { type: 'agent', content: "I can add a recommendation, but please tell me what it is, and make sure you've analyzed a resume first." }]);
+        setChatHistory(prev => [...prev, { type: 'agent', content: "I can add a recommendation, but please tell me what it is." }]);
       }
       return true;
     }
@@ -147,7 +189,8 @@ function ChatWindow({
     setIsLoading(true);
 
     // Do not proceed to analysis if an analysis already exists. Agent handles modifications.
-    if (analysisResult) {
+    // This check should only apply when in 'analyze' mode.
+    if (mode === 'analyze' && analysisResult) {
       setIsLoading(false);
       setChatHistory(prev => [...prev, { type: 'agent', content: "I've already analyzed a resume. You can ask me to make changes or click 'Analyze Resume' to start over." }]);
       return;
@@ -178,7 +221,7 @@ function ChatWindow({
         alert('Failed to analyze resume. Please check the console for details.');
       }
     } else { // Generate mode
-      if (!inputText) {
+      if (!userMessage) {
         alert('Please describe the resume you want to generate in the message box.');
         setIsLoading(false);
         return;
@@ -206,8 +249,6 @@ function ChatWindow({
   };
 
   const handleModeChange = (newMode) => {
-    // This will trigger the reset from App.js
-    handleTitleClick(); 
     setMode(newMode);
   };
 

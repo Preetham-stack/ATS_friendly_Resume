@@ -81,7 +81,6 @@ function App() {
             chatHistory={chatHistory}
             setChatHistory={setChatHistory}
             resetTrigger={resetChat}
-            handleTitleClick={handleTitleClick}
           />
         </div>
         <div className="results-container">
