@@ -12,6 +12,7 @@ function App() {
   const [showOptimizedResume, setShowOptimizedResume] = useState(false);
   const [resetChat, setResetChat] = useState(0); // State to trigger chat window reset
   const [isUpdating, setIsUpdating] = useState(false);
+  const [chatHistory, setChatHistory] = useState([]);
 
   const handleAnalysisComplete = (result) => {
     setGeneratedResume(null);
@@ -59,6 +60,7 @@ function App() {
     setGeneratedResume(null);
     // The modal is part of the main app, so we should control its state here.
     setShowOptimizedResume(false);
+    setChatHistory([]);
     setResetChat(prev => prev + 1); // Increment to trigger reset in ChatWindow
   };
 
@@ -70,7 +72,13 @@ function App() {
           <ChatWindow 
             onAnalysisComplete={handleAnalysisComplete} 
             onResumeGenerated={handleResumeGenerated}
+            analysisResult={analysisResult}
+            setAnalysisResult={setAnalysisResult}
+            handleUpdateResume={handleUpdateResume}
+            chatHistory={chatHistory}
+            setChatHistory={setChatHistory}
             resetTrigger={resetChat}
+            handleTitleClick={handleTitleClick}
           />
         </div>
         <div className="results-container">
@@ -79,7 +87,7 @@ function App() {
           ) : analysisResult ? (
             <ScoreDisplay result={analysisResult} onUpdateResume={handleUpdateResume} isUpdating={isUpdating} />
           ) : (
-            <div className="placeholder-results">Result Container</div>
+            <div className="placeholder-results">Your analysis and optimized resume will appear here.</div>
           )}
         </div>
       </main>

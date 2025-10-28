@@ -1,7 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './ChatWindow.css';
 
-function ChatWindow({ onAnalysisComplete, onResumeGenerated, resetTrigger }) {
+function ChatWindow({ 
+  onAnalysisComplete, 
+  onResumeGenerated, 
+  resetTrigger,
+  analysisResult,
+  setAnalysisResult,
+  handleUpdateResume,
+  chatHistory,
+  setChatHistory,
+  handleTitleClick // Ensure this prop is passed from App.js
+}) {
   const [mode, setMode] = useState('analyze');
   const [resumeFile, setResumeFile] = useState(null); // For initial upload
   const [badgeFiles, setBadgeFiles] = useState([]);
@@ -10,6 +20,7 @@ function ChatWindow({ onAnalysisComplete, onResumeGenerated, resetTrigger }) {
   const fileInputRef = useRef(null);
   const badgeInputRef = useRef(null);
   const textareaRef = useRef(null);
+  const chatBodyRef = useRef(null);
 
   useEffect(() => {
     setMode('analyze');
@@ -22,9 +33,19 @@ function ChatWindow({ onAnalysisComplete, onResumeGenerated, resetTrigger }) {
     }
   }, [resetTrigger]);
 
+  useEffect(() => {
+    // Scroll to the bottom of the chat body whenever history changes
+    if (chatBodyRef.current) {
+      chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+    }
+  }, [chatHistory]);
+
   const handleFileChange = (event) => {
     const file = event.target.files[0];
-    if (file) setResumeFile(file);
+    if (file) {
+      setResumeFile(file);
+      setChatHistory(prev => [...prev, { type: 'file', name: file.name }]);
+    }
     event.target.value = null;
   };
 
@@ -34,7 +55,10 @@ function ChatWindow({ onAnalysisComplete, onResumeGenerated, resetTrigger }) {
     event.target.value = null;
   };
 
-  const removeFile = () => setResumeFile(null);
+  const removeFile = () => {
+    setResumeFile(null);
+    setChatHistory(prev => prev.filter(msg => msg.type !== 'file'));
+  };
   const removeBadgeFile = (index) => {
     setBadgeFiles(prev => prev.filter((_, i) => i !== index));
   };
@@ -51,9 +75,83 @@ function ChatWindow({ onAnalysisComplete, onResumeGenerated, resetTrigger }) {
   const triggerFileSelect = () => fileInputRef.current.click();
   const triggerBadgeFileSelect = () => badgeInputRef.current.click();
 
+  const handleAgentInteraction = (text) => {
+    const lowercasedText = text.toLowerCase();
+    
+    // Intent: Add skills
+    if (lowercasedText.startsWith('add skill') || lowercasedText.startsWith('add skills')) {
+      const skillsToAdd = text.replace(/add skills?/i, '').trim().split(',').map(s => s.trim()).filter(Boolean);
+      if (skillsToAdd.length > 0 && analysisResult) {
+        setAnalysisResult(prev => ({
+          ...prev,
+          jd_skills: [...new Set([...(prev.jd_skills || []), ...skillsToAdd])]
+        }));
+        setChatHistory(prev => [...prev, { type: 'agent', content: `Okay, I've added the following skills to the analysis: ${skillsToAdd.join(', ')}.` }]);
+      } else {
+        setChatHistory(prev => [...prev, { type: 'agent', content: "I can do that, but please provide the skills you want to add, and make sure you've analyzed a resume first." }]);
+      }
+      return true;
+    }
+
+    // Intent: Add recommendation
+    if (lowercasedText.startsWith('add recommendation')) {
+      const recommendation = text.replace(/add recommendation/i, '').trim();
+      if (recommendation && analysisResult) {
+        setAnalysisResult(prev => ({
+          ...prev,
+          recommendations_for_improvement: [...(prev.recommendations_for_improvement || []), recommendation]
+        }));
+        setChatHistory(prev => [...prev, { type: 'agent', content: "I've added that to the recommendations." }]);
+      } else {
+        setChatHistory(prev => [...prev, { type: 'agent', content: "I can add a recommendation, but please tell me what it is, and make sure you've analyzed a resume first." }]);
+      }
+      return true;
+    }
+
+    // Intent: Trigger resume update
+    if (lowercasedText.includes('update my resume') || lowercasedText.includes('generate the resume')) {
+      if (analysisResult) {
+        setChatHistory(prev => [...prev, { type: 'agent', content: "Sure, I'm updating the resume now based on the analysis. Please wait..." }]);
+        handleUpdateResume(); // This is the async function from App.js
+      } else {
+        setChatHistory(prev => [...prev, { type: 'agent', content: "I can't update a resume without an initial analysis. Please upload a resume and job description first." }]);
+      }
+      return true;
+    }
+
+    return false; // No specific agent action was taken
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
+    
+    const userMessage = inputText.trim();
+    if (!userMessage && !resumeFile) {
+      alert('Please upload a resume or type a message.');
+      return;
+    }
+
+    if (userMessage) {
+      setChatHistory(prev => [...prev, { type: 'user', content: userMessage }]);
+      setInputText(''); // Clear input after sending
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+
+      if (handleAgentInteraction(userMessage)) {
+        // Agent handled the interaction, so we stop here.
+        // We also set loading to false in case it was set by a previous, non-agent interaction.
+        setIsLoading(false);
+        return; 
+      }
+    }
+
     setIsLoading(true);
+
+    // Do not proceed to analysis if an analysis already exists. Agent handles modifications.
+    if (analysisResult) {
+      setIsLoading(false);
+      setChatHistory(prev => [...prev, { type: 'agent', content: "I've already analyzed a resume. You can ask me to make changes or click 'Analyze Resume' to start over." }]);
+      return;
+    }
 
     const formData = new FormData();
 
@@ -64,7 +162,8 @@ function ChatWindow({ onAnalysisComplete, onResumeGenerated, resetTrigger }) {
         return;
       }
       formData.append('resume', resumeFile);
-      formData.append('job_description', inputText);
+      // Use the last user message as the JD if it exists
+      formData.append('job_description', userMessage);
 
       try {
         const response = await fetch('http://localhost:5000/api/analyze', {
@@ -73,6 +172,7 @@ function ChatWindow({ onAnalysisComplete, onResumeGenerated, resetTrigger }) {
         if (!response.ok) throw new Error('Server responded with an error!');
         const data = await response.json();
         onAnalysisComplete(data);
+        setChatHistory(prev => [...prev, { type: 'agent', content: "I've finished analyzing the resume. You can see the report on the right. Feel free to ask for changes, like 'add skill Python' or 'update my resume'." }]);
       } catch (error) {
         console.error('Error analyzing resume:', error);
         alert('Failed to analyze resume. Please check the console for details.');
@@ -83,7 +183,7 @@ function ChatWindow({ onAnalysisComplete, onResumeGenerated, resetTrigger }) {
         setIsLoading(false);
         return;
       }
-      formData.append('prompt', inputText);
+      formData.append('prompt', userMessage);
       badgeFiles.forEach(file => {
         formData.append('badges', file);
       });
@@ -102,40 +202,25 @@ function ChatWindow({ onAnalysisComplete, onResumeGenerated, resetTrigger }) {
     }
 
     setIsLoading(false);
-    setInputText('');
-    setResumeFile(null);
-    setBadgeFiles([]);
-    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+    // Don't clear state here, it's part of the history now
+  };
+
+  const handleModeChange = (newMode) => {
+    // This will trigger the reset from App.js
+    handleTitleClick(); 
+    setMode(newMode);
   };
 
   return (
     <div className="chat-window-container">
       <div className="chat-header">
-        <span onClick={() => setMode('analyze')} className={`mode-option ${mode === 'analyze' ? 'active' : ''}`}>Analyze Resume</span>
+        <span onClick={() => handleModeChange('analyze')} className={`mode-option ${mode === 'analyze' ? 'active' : ''}`}>Analyze Resume</span>
         <span className="mode-separator">|</span>
-        <span onClick={() => setMode('generate')} className={`mode-option ${mode === 'generate' ? 'active' : ''}`}>Generate Resume</span>
+        <span onClick={() => handleModeChange('generate')} className={`mode-option ${mode === 'generate' ? 'active' : ''}`}>Generate Resume</span>
       </div>
 
-      <div className="chat-body">
-        {mode === 'analyze' && resumeFile && (
-          <div className="file-display-card">
-            <span className="file-icon">📄</span>
-            <span className="file-name">{resumeFile.name}</span>
-            <button onClick={removeFile} className="remove-file-button">&times;</button>
-          </div>
-        )}
-        {mode === 'generate' && badgeFiles.length > 0 && (
-          <div className="badge-display-area">
-            {badgeFiles.map((file, index) => (
-              <div key={index} className="file-display-card badge-card">
-                <span className="file-icon">🎖️</span>
-                <span className="file-name">{file.name}</span>
-                <button onClick={() => removeBadgeFile(index)} className="remove-file-button">&times;</button>
-              </div>
-            ))}
-          </div>
-        )}
-        {!resumeFile && badgeFiles.length === 0 && (
+      <div className="chat-body" ref={chatBodyRef}>
+        {chatHistory.length === 0 && (
           <div className="placeholder-text">
             {mode === 'analyze'
               ? "Use the '+' to upload your resume, paste a job description, and hit send."
@@ -143,11 +228,26 @@ function ChatWindow({ onAnalysisComplete, onResumeGenerated, resetTrigger }) {
             }
           </div>
         )}
+        {chatHistory.map((msg, index) => {
+          if (msg.type === 'file') {
+            return (
+              <div key={index} className="file-display-card">
+                <span className="file-icon">📄</span>
+                <span className="file-name">{msg.name}</span>
+                <button onClick={removeFile} className="remove-file-button">&times;</button>
+              </div>
+            );
+          }
+          return (
+            <div key={index} className={`chat-message ${msg.type}`}>
+              <div className="message-bubble">{msg.content}</div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="chat-input-area">
-        <form onSubmit={handleSubmit} className="message-form">
-          {/* Disable file upload buttons if analysis result is displayed */}
+        <form onSubmit={handleSubmit} className="message-form" onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleSubmit(e); }}>
           <button type="button" className="add-file-button" onClick={triggerFileSelect}>+</button>
           {mode === 'generate' && (
             <button type="button" className="add-file-button" onClick={triggerBadgeFileSelect}>🎖️</button>
@@ -160,7 +260,7 @@ function ChatWindow({ onAnalysisComplete, onResumeGenerated, resetTrigger }) {
             placeholder={mode === 'analyze' ? 'Paste job description here (optional)..' : 'Describe the resume you want...'}
             value={inputText}
             onChange={handleTextChange}
-            rows="1" // Disable input if analysis result is displayed
+            rows="1"
           />
           <button type="submit" className="send-button" disabled={isLoading}>
             {isLoading ? <div className="loader"></div> : '➤'}
