@@ -82,12 +82,20 @@ def create_optimization_prompt(resume_text: str, jd_text: str, recommendations: 
     You are an expert ATS Optimization AI. Analyze the provided resume and job description, then rewrite the resume
     to maximize its ATS score (target score: 85+).
 
-    Incorporate the following specific recommendations for improvement: {recommendations}
+    Incorporate the following specific recommendations for improvement:
+    {recommendations}
+
+    **Formatting Instructions:**
+    The `optimized_resume_text` MUST use these special format markers:
+    - [H1] for the person's name
+    - [H2] for major sections (e.g., PROFILE, PROFESSIONAL EXPERIENCE, SKILLS, EDUCATION)
+    - [H3] for job titles or sub-sections
+    - [BULLET] for bullet points under experience or other sections
 
     Return a **valid JSON only**, with this structure:
     {{
       "ats_score": <integer>,
-      "optimized_resume_text": "<string>",
+      "optimized_resume_text": "<string with formatting markers>",
       "modifications_made": ["<string>", ...],
       "user_recommendations": ["<string>", ...]
     }}
@@ -254,8 +262,65 @@ def update_resume_endpoint():
     timestamp = int(time.time())
     optimized_filename = f"Optimized_Resume_{timestamp}.docx"
     optimized_filepath = os.path.join(app.config['UPLOAD_FOLDER'], optimized_filename)
+    
     doc = Document()
-    doc.add_paragraph(ai_response.get("optimized_resume_text", ""))
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'Calibri'
+    font.size = Pt(11)
+    
+    # Set default paragraph spacing for the document
+    paragraph_format = style.paragraph_format
+    paragraph_format.space_before = Pt(0)
+    paragraph_format.space_after = Pt(6)
+
+    optimized_text = ai_response.get("optimized_resume_text", "")
+
+    # Parse the structured text to create a formatted Word document
+    for line in optimized_text.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+
+        if line.startswith('[H1]'):
+            text = line.replace('[H1]', '').strip()
+            p = doc.add_paragraph()
+            run = p.add_run(text)
+            run.bold = True
+            run.font.size = Pt(18)
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p.paragraph_format.space_after = Pt(12)
+        elif line.startswith('[H2]'):
+            text = line.replace('[H2]', '').strip()
+            p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(12)
+            p.paragraph_format.space_after = Pt(4)
+            run = p.add_run(text)
+            run.bold = True
+            run.font.size = Pt(14)
+            # Optional: Add a bottom border to H2 sections
+            # from docx.oxml.ns import qn
+            # from docx.oxml import OxmlElement
+            # pPr = p._p.get_or_add_pPr()
+            # pBdr = OxmlElement('w:pBdr')
+            # bottom = OxmlElement('w:bottom')
+            # bottom.set(qn('w:val'), 'single')
+            # pBdr.append(bottom)
+            # pPr.append(pBdr)
+        elif line.startswith('[H3]'):
+            text = line.replace('[H3]', '').strip()
+            p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(8)
+            p.paragraph_format.space_after = Pt(2)
+            run = p.add_run(text)
+            run.bold = True
+            run.font.size = Pt(12)
+        elif line.startswith('[BULLET]'):
+            text = line.replace('[BULLET]', '').strip()
+            doc.add_paragraph(text, style='List Bullet')
+        else:
+            doc.add_paragraph(line)
+
     doc.save(optimized_filepath)
 
     ai_response['download_path'] = f"/uploads/{optimized_filename}"

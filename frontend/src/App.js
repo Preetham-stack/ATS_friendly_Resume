@@ -90,7 +90,12 @@ function App() {
           ) : analysisResult ? (
             <ScoreDisplay result={analysisResult} onUpdateResume={handleUpdateResume} isUpdating={isUpdating} />
           ) : (
-            <div className="placeholder-results">Your analysis and optimized resume will appear here.</div>
+            <div className="placeholder-results">
+               <div className="results-header">
+                 <span className="mode-option active">Result Window</span>
+               </div>
+               <div className="placeholder-content">Your analysis and optimized resume will appear here.</div>
+            </div>
           )}
         </div>
       </main>

@@ -11,6 +11,11 @@ function ResumeDisplay({ resume }) {
   // Check if we have the detailed update response object
   const isDetailedResponse = resume && typeof resume === 'object' && resume.optimized_resume_text;
 
+  // Helper function to remove formatting markers for UI display
+  const cleanTextForPreview = (text) => {
+    return text.replace(/\[H1\]|\[H2\]|\[H3\]|\[BULLET\]/g, '').trim();
+  };
+
   if (isDetailedResponse) {
     return (
       <div className="resume-display-container detailed-report">
@@ -36,7 +41,7 @@ function ResumeDisplay({ resume }) {
           <a href={`http://localhost:5000${resume.download_path}`} download className="download-button">
             Download as DOCX
           </a>
-          <pre className="resume-content">{resume.optimized_resume_text}</pre>
+          <pre className="resume-content">{cleanTextForPreview(resume.optimized_resume_text)}</pre>
         </div>
       </div>
     );
