@@ -1,91 +1,64 @@
-import React from 'react';
-import './ScoreDisplay.css';
+ import React from 'react';
+ import './ScoreDisplay.css';
 
-function ScoreDisplay({ result, onShowOptimizedResume }) {
+ function ScoreDisplay({ result, onUpdateResume, isUpdating }) {
+   if (!result) {
+     return <div className="score-display placeholder">Your analysis results will appear here.</div>;
+   }
 
-  const handleExport = async () => {
-    try {
-      const response = await fetch('http://localhost:5000/api/export-to-sheets', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(result),
-      });
-      const responseData = await response.json();
-      if (!response.ok) {
-        throw new Error(responseData.error || 'Failed to export.');
-      }
-      alert('Successfully exported to Google Sheets!');
-    } catch (error) {
-      console.error('Error exporting to sheets:', error);
-      alert(`Failed to export: ${error.message}`);
-    }
-  };
+   return (
+     <div className="score-display">
+       <h2>Analysis Report</h2>
+       <div className="scores-container">
+         <div className="score-summary">
+           <span className="score-label">ATS Score</span>
+           <span className="score-number">{result.ats_score_estimation || 0}%</span>
+         </div>
+         <div className="score-summary">
+           <span className="score-label">Skills Match</span>
+           <span className="score-number">{result.skills_matching_score || 0}%</span>
+         </div>
+       </div>
+     <p className="feedback">{result.feedback}</p>
 
-  if (!result) {
-    return (
-      <div className="score-display placeholder">
-        <h2>Your Analysis Results</h2>
-        <p>Upload your resume and a job description to see your ATS score and get suggestions for improvement.</p>
-      </div>
-    );
-  }
+       {result.missing_keywords && result.missing_keywords.length > 0 && (
+         <div className="keywords-section">
+           <h3>Missing Keywords</h3>
+           <div className="keywords-container">
+             {result.missing_keywords.map((keyword, i) => (
+               <span key={i} className="keyword-pill">{keyword}</span>
+             ))}
+           </div>
+         </div>
+       )}
 
-  const { ats_score, modifications_made, user_recommendations, download_path } = result;
+       <div className="skills-comparison-container">
+         <div className="skills-column">
+           <h3>Skills in Job Description</h3>
+           <ul className="skills-list">
+             {result.jd_skills?.map((skill, i) => <li key={i}>{skill}</li>)}
+           </ul>
+         </div>
+         <div className="skills-column">
+           <h3>Skills in Your Resume</h3>
+           <ul className="skills-list">
+             {result.resume_skills?.map((skill, i) => <li key={i}>{skill}</li>)}
+           </ul>
+         </div>
+       </div>
 
-  return (
-    <div className="score-display">
-      <h2>Your Analysis Results</h2>
-      <div className="score-circle">
-        <span className="score-number">{ats_score}</span>
-        <span className="score-label">/ 100</span>
-      </div>
-      <p className="score-feedback">
-        {ats_score >= 85
-          ? "Great job! Your resume is highly ATS-friendly."
-          : "Your resume has been optimized to beat the bots!"
-        }
-      </p>
+       <div className="recommendations-section">
+         <h3>Recommendations for Improvement</h3>
+         <ul className="recommendations-list">
+           {result.recommendations_for_improvement?.map((rec, i) => <li key={i}>{rec}</li>)}
+         </ul>
+       </div>
 
-      <div className="results-pills">
-        <button className="pill-button" onClick={() => onShowOptimizedResume(true)}>View Optimized Resume</button>
-        {download_path && (
-          <a href={`http://localhost:5000/${download_path}`} download className="pill-button download">
-             Download (.docx)
-          </a>
-        )}
-        <button className="pill-button export" onClick={handleExport}>Export to Sheets</button>
-      </div>
+       <button onClick={onUpdateResume} className="update-resume-button" disabled={isUpdating}>
+         {isUpdating ? <div className="loader small"></div> : 'Update Resume'}
+       </button>
+     </div>
+   );
+ }
 
-      <div className="suggestions-container">
-        <div className="suggestions-column">
-          <h3>AI Modifications Made</h3>
-          <ul className="suggestions-list">
-            {modifications_made && modifications_made.length > 0 ? (
-              modifications_made.map((mod, index) => (
-                <li key={index}>{mod}</li>
-              ))
-            ) : (
-              <li>No specific modifications were needed.</li>
-            )}
-          </ul>
-        </div>
-        <div className="suggestions-column">
-          <h3>Further Recommendations</h3>
-          <ul className="suggestions-list">
-            {user_recommendations && user_recommendations.length > 0 ? (
-              user_recommendations.map((rec, index) => (
-                <li key={index}>{rec}</li>
-              ))
-            ) : (
-              <li>No further recommendations. Looks great!</li>
-            )}
-          </ul>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default ScoreDisplay;
+ export default ScoreDisplay;
