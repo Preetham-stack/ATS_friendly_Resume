@@ -77,7 +77,6 @@ def parse_resume_text(filepath: str) -> str:
             return ""
     return ""
 
-
 def create_optimization_prompt(resume_text: str, jd_text: str, recommendations: str) -> str:
     return f'''
     You are an expert ATS Optimization AI. Analyze the provided resume and job description, then rewrite the resume
@@ -100,7 +99,6 @@ def create_optimization_prompt(resume_text: str, jd_text: str, recommendations: 
     Resume:
     {resume_text}
     '''
-
 
 def create_analysis_prompt(resume_text: str, jd_text: str) -> str:
     return f'''
@@ -224,6 +222,10 @@ def analyze_resume_endpoint():
     prompt = create_analysis_prompt(resume_text, job_description)
     ai_response = get_gemini_response(prompt)
 
+    # Add the original resume and JD text to the response for later use by the frontend
+    ai_response['resume_text'] = resume_text
+    ai_response['job_description'] = job_description
+
     return jsonify(ai_response)
 
 @app.route('/api/update-resume', methods=['POST'])
@@ -231,31 +233,26 @@ def update_resume_endpoint():
     if not GEMINI_MODEL:
         return jsonify({'error': 'AI model not configured. Please check your API key.'}), 500
 
-    if 'resume' not in request.files:
-        return jsonify({'error': 'No resume file provided.'}), 400
-
-    file = request.files['resume']
+    # Accept resume text directly from the form
+    resume_text = request.form.get('original_resume_text')
     job_description = request.form.get('job_description', '')
     recommendations = request.form.get('recommendations_for_improvement', '')
 
-    if file.filename == '' or not allowed_file(file.filename):
-        return jsonify({'error': 'Invalid or no file selected.'}), 400
-
-    filename = secure_filename(file.filename)
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(filepath)
-
-    resume_text = parse_resume_text(filepath)
-    if not resume_text or "parsing is not fully implemented" in resume_text:
-        return jsonify({'error': 'Unable to read resume file.'}), 500
+    if not resume_text:
+        return jsonify({'error': 'Original resume text not provided.'}), 400
 
     prompt = create_optimization_prompt(resume_text, job_description, recommendations)
     ai_response = get_gemini_response(prompt)
 
     if "error" in ai_response:
         return jsonify(ai_response), 500
+    
+    
 
-    optimized_filename = f"Optimized_{filename.rsplit('.', 1)[0]}.docx"
+    # Create a unique filename for the downloadable doc
+    import time
+    timestamp = int(time.time())
+    optimized_filename = f"Optimized_Resume_{timestamp}.docx"
     optimized_filepath = os.path.join(app.config['UPLOAD_FOLDER'], optimized_filename)
     doc = Document()
     doc.add_paragraph(ai_response.get("optimized_resume_text", ""))

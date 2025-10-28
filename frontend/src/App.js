@@ -32,24 +32,27 @@ function App() {
     setIsUpdating(true);
     const formData = new FormData();
 
-    formData.append('original_resume_text', analysisResult.resume);
-    if (analysisResult.job_description) {
-      formData.append('job_description', analysisResult.job_description);
-    }
-    const updatePrompt = `Optimize the provided resume based on these recommendations: \n- ${analysisResult.recommendations_for_improvement.join('\n- ')}`;
-    formData.append('prompt', updatePrompt);
+    // The analysis from the backend doesn't contain the raw resume text.
+     // We need to get it from the chat history or pass it around.
+     // For now, let's assume the analysisResult *does* have the resume text.
+     // If not, we'll need to adjust how we store it after analysis.
+     formData.append('original_resume_text', analysisResult.resume_text); // Assuming resume_text is in analysisResult
+     if (analysisResult.job_description) {
+       formData.append('job_description', analysisResult.job_description);
+     }
+     formData.append('recommendations_for_improvement', JSON.stringify(analysisResult.recommendations_for_improvement));
 
-    try {
-      const response = await fetch('http://localhost:5000/api/generate-resume', {
-        method: 'POST',
-        body: formData,
-      });
-      if (!response.ok) throw new Error('Server responded with an error during resume update!');
-      const data = await response.json();
-      handleResumeGenerated(data); // Use the existing handler to set the new resume
-    } catch (error) {
-      console.error('Error updating resume:', error);
-      alert('Failed to update resume. Please check the console for details.');
+     try {
+       const response = await fetch('http://localhost:5000/api/update-resume', {
+         method: 'POST',
+         body: formData,
+       });
+       if (!response.ok) throw new Error('Server responded with an error during resume update!');
+       const data = await response.json();
+       handleResumeGenerated(data); // This will now receive the detailed update response
+     } catch (error) {
+       console.error('Error updating resume:', error);
+       alert('Failed to update resume. Please check the console for details.');
     } finally {
       setIsUpdating(false);
     }
