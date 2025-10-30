@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './ChatWindow.css';
 
-function ChatWindow({ 
-  onAnalysisComplete, 
-  onResumeGenerated, 
+function ChatWindow({
+  onAnalysisComplete,
+  onResumeGenerated,
   resetTrigger,
+  // These props are now correctly passed from App.js
   analysisResult,
   setAnalysisResult,
   handleUpdateResume,
@@ -22,13 +23,12 @@ function ChatWindow({
   const chatBodyRef = useRef(null);
 
   useEffect(() => {
-    // This effect should ONLY run when the resetTrigger prop changes.
-    // The check for > 0 ensures it doesn't run on the initial render.
-    if (resetTrigger > 0) { 
+    if (resetTrigger > 0) {
       setResumeFile(null);
       setBadgeFiles([]);
       setInputText('');
       setIsLoading(false);
+      setChatHistory([]); // Clear chat history on reset
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
@@ -36,7 +36,6 @@ function ChatWindow({
   }, [resetTrigger]);
 
   useEffect(() => {
-    // Scroll to the bottom of the chat body whenever history changes
     if (chatBodyRef.current) {
       chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
     }
@@ -46,23 +45,29 @@ function ChatWindow({
     const file = event.target.files[0];
     if (file) {
       setResumeFile(file);
-      setChatHistory(prev => [...prev, { type: 'file', name: file.name }]);
+      setChatHistory(prev => [...prev, { type: 'file', name: file.name, fileType: 'resume' }]);
     }
     event.target.value = null;
   };
 
   const handleBadgeFileChange = (event) => {
     const files = Array.from(event.target.files);
-    if (files.length > 0) setBadgeFiles(prev => [...prev, ...files]);
+    if (files.length > 0) {
+      setBadgeFiles(prev => [...prev, ...files]);
+      const newBadges = files.map(file => ({ type: 'file', name: file.name, fileType: 'badge' }));
+      setChatHistory(prev => [...prev, ...newBadges]);
+    }
     event.target.value = null;
   };
 
-  const removeFile = () => {
-    setResumeFile(null);
-    setChatHistory(prev => prev.filter(msg => msg.type !== 'file'));
-  };
-  const removeBadgeFile = (index) => {
-    setBadgeFiles(prev => prev.filter((_, i) => i !== index));
+  const removeFile = (name, fileType) => {
+    if (fileType === 'resume') {
+      setResumeFile(null);
+      setChatHistory(prev => prev.filter(msg => msg.name !== name || msg.fileType !== 'resume'));
+    } else if (fileType === 'badge') {
+      setBadgeFiles(prev => prev.filter(file => file.name !== name));
+      setChatHistory(prev => prev.filter(msg => msg.name !== name || msg.fileType !== 'badge'));
+    }
   };
 
   const handleTextChange = (event) => {
@@ -77,16 +82,14 @@ function ChatWindow({
   const triggerFileSelect = () => fileInputRef.current.click();
   const triggerBadgeFileSelect = () => badgeInputRef.current.click();
 
- const handleAgentInteraction = (text) => {
+  const handleAgentInteraction = (text) => {
     const lowercasedText = text.toLowerCase();
-    
-    // Most agent interactions require an analysis to be present.
+
     if (!analysisResult && (lowercasedText.startsWith('add') || lowercasedText.startsWith('remove') || lowercasedText.includes('update'))) {
       setChatHistory(prev => [...prev, { type: 'agent', content: "I can do that, but you need to analyze a resume first. Please upload a resume and job description." }]);
       return true;
     }
 
-    // Regex to capture action (add/remove), skills, and target (resume/jd)
     const skillCommandRegex = /^(add|remove) skills? (.*?)(?: to| from)? the (resume|job description|jd|analysis)?$/i;
     const match = text.match(skillCommandRegex);
 
@@ -120,7 +123,6 @@ function ChatWindow({
       return true;
     }
 
-    // Fallback for simple "add skill" without target
     if (lowercasedText.startsWith('add skill')) {
       const skillsToAdd = text.replace(/add skills?/i, '').trim().split(',').map(s => s.trim()).filter(Boolean);
       if (skillsToAdd.length > 0) {
@@ -135,7 +137,6 @@ function ChatWindow({
       return true;
     }
 
-    // Intent: Add recommendation
     if (lowercasedText.startsWith('add recommendation')) {
       const recommendation = text.replace(/add recommendation/i, '').trim();
       if (recommendation && analysisResult) {
@@ -150,62 +151,55 @@ function ChatWindow({
       return true;
     }
 
-    // Intent: Trigger resume update
     if (lowercasedText.includes('update my resume') || lowercasedText.includes('generate the resume')) {
       if (analysisResult) {
         setChatHistory(prev => [...prev, { type: 'agent', content: "Sure, I'm updating the resume now based on the analysis. Please wait..." }]);
-        handleUpdateResume(); // This is the async function from App.js
+        handleUpdateResume();
       } else {
         setChatHistory(prev => [...prev, { type: 'agent', content: "I can't update a resume without an initial analysis. Please upload a resume and job description first." }]);
       }
       return true;
     }
 
-    return false; // No specific agent action was taken
+    return false;
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    
+
     const userMessage = inputText.trim();
-    if (!userMessage && !resumeFile) {
+    if (!userMessage && !resumeFile && mode === 'analyze') {
       alert('Please upload a resume or type a message.');
+      return;
+    }
+    if (!userMessage && mode === 'generate') {
+      alert('Please describe the resume you want to generate in the message box.');
       return;
     }
 
     if (userMessage) {
       setChatHistory(prev => [...prev, { type: 'user', content: userMessage }]);
-      setInputText(''); // Clear input after sending
+      setInputText('');
       if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
-      if (handleAgentInteraction(userMessage)) {
-        // Agent handled the interaction, so we stop here.
-        // We also set loading to false in case it was set by a previous, non-agent interaction.
+      // Check for agent interaction only if in analyze mode and analysisResult exists
+      if (mode === 'analyze' && analysisResult && handleAgentInteraction(userMessage)) {
         setIsLoading(false);
-        return; 
+        return;
       }
     }
 
     setIsLoading(true);
 
-    // Do not proceed to analysis if an analysis already exists. Agent handles modifications.
-    // This check should only apply when in 'analyze' mode.
-    if (mode === 'analyze' && analysisResult) {
-      setIsLoading(false);
-      setChatHistory(prev => [...prev, { type: 'agent', content: "I've already analyzed a resume. You can ask me to make changes or click 'Analyze Resume' to start over." }]);
-      return;
-    }
-
     const formData = new FormData();
 
     if (mode === 'analyze') {
       if (!resumeFile) {
-        alert('Please upload a resume file using the '+' button.');
+        alert('Please upload a resume file using the ' + ' button.');
         setIsLoading(false);
         return;
       }
       formData.append('resume', resumeFile);
-      // Use the last user message as the JD if it exists
       formData.append('job_description', userMessage);
 
       try {
@@ -221,12 +215,11 @@ function ChatWindow({
         alert('Failed to analyze resume. Please check the console for details.');
       }
     } else { // Generate mode
-      if (!userMessage) {
-        alert('Please describe the resume you want to generate in the message box.');
-        setIsLoading(false);
-        return;
+      // Corrected FormData keys for generate-resume
+      formData.append('job_description', userMessage);
+      if (resumeFile) {
+        formData.append('resume', resumeFile);
       }
-      formData.append('prompt', userMessage);
       badgeFiles.forEach(file => {
         formData.append('badges', file);
       });
@@ -238,6 +231,7 @@ function ChatWindow({
         if (!response.ok) throw new Error('Server responded with an error!');
         const data = await response.json();
         onResumeGenerated(data);
+        setChatHistory(prev => [...prev, { type: 'agent', content: "I've generated a new resume for you. You can see the draft on the right." }]);
       } catch (error) {
         console.error('Error generating resume:', error);
         alert('Failed to generate resume. Please check the console for details.');
@@ -245,7 +239,6 @@ function ChatWindow({
     }
 
     setIsLoading(false);
-    // Don't clear state here, it's part of the history now
   };
 
   const handleModeChange = (newMode) => {
@@ -265,7 +258,7 @@ function ChatWindow({
           <div className="placeholder-text">
             {mode === 'analyze'
               ? "Use the '+' to upload your resume, paste a job description, and hit send."
-              : "Use '+' to upload a resume, 🎖️ to add badges, describe the resume, and hit send."
+              : "Describe the resume you want, optionally add a base resume (+) or badges (🎖️), and hit send."
             }
           </div>
         )}
@@ -273,9 +266,9 @@ function ChatWindow({
           if (msg.type === 'file') {
             return (
               <div key={index} className="file-display-card">
-                <span className="file-icon">📄</span>
+                <span className="file-icon">{msg.fileType === 'badge' ? '🎖️' : '📄'}</span>
                 <span className="file-name">{msg.name}</span>
-                <button onClick={removeFile} className="remove-file-button">&times;</button>
+                <button onClick={() => removeFile(msg.name, msg.fileType)} className="remove-file-button">&times;</button>
               </div>
             );
           }
@@ -285,6 +278,11 @@ function ChatWindow({
             </div>
           );
         })}
+        {isLoading && (
+            <div className="chat-message agent">
+                <div className="message-bubble"><div className="loader small"></div></div>
+            </div>
+        )}
       </div>
 
       <div className="chat-input-area">

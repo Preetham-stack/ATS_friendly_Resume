@@ -84,10 +84,15 @@ function App() {
           />
         </div>
         <div className="results-container">
-          {generatedResume ? (
+          { generatedResume && (generatedResume.generated_resume_text || generatedResume.content) ? (
             <ResumeDisplay resume={generatedResume} />
-          ) : analysisResult ? (
-            <ScoreDisplay result={analysisResult} onUpdateResume={handleUpdateResume} isUpdating={isUpdating} />
+          ) : (analysisResult || generatedResume) ? (
+            <ScoreDisplay 
+              result={analysisResult} 
+              resume={generatedResume} 
+              onUpdateResume={handleUpdateResume} 
+              isUpdating={isUpdating} 
+            />
           ) : (
             <div className="placeholder-results">
                <div className="results-header">

@@ -1,56 +1,62 @@
-// In C:/Users/MCPL-L166/PycharmProjects/ATSFriendly_Resume/frontend/src/components/ResumeDisplay.js
-
 import React from 'react';
 import './ResumeDisplay.css';
 
 function ResumeDisplay({ resume }) {
   if (!resume) {
-    return null;
+    return null; 
   }
 
-  // Check if we have the detailed update response object
-  const isDetailedResponse = resume && typeof resume === 'object' && resume.optimized_resume_text;
-
-  // Helper function to remove formatting markers for UI display
-  const cleanTextForPreview = (text) => {
-    return text.replace(/\[H1\]|\[H2\]|\[H3\]|\[BULLET\]/g, '').trim();
+  const cleanContentForDisplay = (text) => {
+    if (!text) return '';
+    const textWithMarkersRemoved = text.replace(/\[.*?\]/g, '');
+    const cleanLines = textWithMarkersRemoved
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+    return cleanLines.join('\n');
   };
 
-  if (isDetailedResponse) {
-    return (
-      <div className="resume-display-container detailed-report">
-        <div className="report-header">
-          <h2>Optimized Resume Report</h2>
+  // **ADAPTATION**: Handle both old ('content', 'skills') and new ('generated_resume_text', 'extracted_skills') formats
+  const resumeContent = resume.generated_resume_text || resume.content;
+  const skills = resume.extracted_skills || resume.skills;
+  const atsScore = resume.ats_score;
+
+  const cleanResumeContent = cleanContentForDisplay(resumeContent);
+
+  return (
+    <div className="resume-display">
+      <h2>Generated Resume Report</h2>
+
+      {atsScore !== undefined && (
+        <div className="score-section">
           <div className="score-summary">
-            <span className="score-label">New ATS Score</span>
-            <span className="score-number">{resume.ats_score || 0}%</span>
+              <span className="score-label">ATS Score</span>
+              <span className="score-number">{atsScore}%</span>
           </div>
         </div>
+      )}
 
-        <div className="modifications-section">
-          <h3>Modifications Made</h3>
-          <ul className="modifications-list">
-            {resume.modifications_made?.map((mod, index) => (
-              <li key={index}>{mod}</li>
+      {skills && skills.length > 0 && (
+        <div className="resume-section">
+          <h3>Extracted Skills</h3>
+          <div className="skills-container">
+            {skills.map((skill, index) => (
+              <span key={index} className="skill-badge">{skill}</span>
             ))}
-          </ul>
+          </div>
         </div>
+      )}
 
-        <div className="resume-text-section">
-          <h3>Optimized Resume Text</h3>
-          <a href={`http://localhost:5000${resume.download_path}`} download className="download-button">
-            Download as DOCX
-          </a>
-          <pre className="resume-content">{cleanTextForPreview(resume.optimized_resume_text)}</pre>
-        </div>
+      <div className="resume-text-section">
+        <h3>Generated Resume Draft</h3>
+        {resume.download_path && (
+            <a href={`http://localhost:5000${resume.download_path}`} download className="download-button">
+                Download as DOCX
+            </a>
+        )}
+        <pre className="resume-content-text">{cleanResumeContent}</pre>
       </div>
-    );
-  }
 
-  // Fallback for simple text responses
-  return (
-    <div className="resume-display-container">
-      <pre className="resume-content">{typeof resume === 'string' ? resume : ''}</pre>
     </div>
   );
 }
