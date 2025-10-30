@@ -1,13 +1,36 @@
-import React from 'react';
+import React, { useState } from 'react';
 import './ScoreDisplay.css';
 
-function ScoreDisplay({ result, resume, onUpdateResume, isUpdating }) {
-  // Helper function to remove formatting markers for UI display
+function ScoreDisplay({ result, resume, onUpdateResume, isUpdating, setAnalysisResult }) {
+  const [newRecommendation, setNewRecommendation] = useState('');
+
   const cleanTextForPreview = (text) => {
     return text.replace(/\[H1\]|\[H2\]|\[H3\]|\[BULLET\]/g, '').trim();
   };
 
-  // Check if we have the detailed update response object (optimized resume)
+  const handleRemoveRecommendation = (indexToRemove) => {
+    const updatedRecommendations = result.recommendations_for_improvement.filter(
+      (_, index) => index !== indexToRemove
+    );
+    setAnalysisResult({
+      ...result,
+      recommendations_for_improvement: updatedRecommendations,
+    });
+  };
+
+  const handleAddRecommendation = () => {
+    if (newRecommendation.trim() === '') return;
+    const updatedRecommendations = [
+      ...(result.recommendations_for_improvement || []),
+      newRecommendation.trim(),
+    ];
+    setAnalysisResult({
+      ...result,
+      recommendations_for_improvement: updatedRecommendations,
+    });
+    setNewRecommendation('');
+  };
+
   const isDetailedResumeResponse = resume && typeof resume === 'object' && resume.optimized_resume_text;
 
   if (isDetailedResumeResponse) {
@@ -15,9 +38,17 @@ function ScoreDisplay({ result, resume, onUpdateResume, isUpdating }) {
       <div className="resume-display-container detailed-report">
         <div className="report-header">
           <h2>Optimized Resume Report</h2>
-          <div className="score-summary">
-            <span className="score-label">New ATS Score</span>
-            <span className="score-number">{resume.ats_score || 0}%</span>
+          <div className="score-comparison-container">
+            {result && result.ats_score_estimation !== undefined && (
+              <div className="score-summary old-score">
+                <span className="score-label">Old ATS Score</span>
+                <span className="score-number">{result.ats_score_estimation || 0}%</span>
+              </div>
+            )}
+            <div className="score-summary new-score">
+              <span className="score-label">New ATS Score</span>
+              <span className="score-number">{resume.ats_score || 0}%</span>
+            </div>
           </div>
         </div>
 
@@ -41,7 +72,6 @@ function ScoreDisplay({ result, resume, onUpdateResume, isUpdating }) {
     );
   }
 
-  // Fallback for simple text responses (if resume is just a string, though not expected with current logic)
   if (resume && typeof resume === 'string') {
     return (
       <div className="resume-display-container">
@@ -50,7 +80,6 @@ function ScoreDisplay({ result, resume, onUpdateResume, isUpdating }) {
     );
   }
 
-  // Display initial analysis report if 'result' is available
   if (result) {
     return (
       <div className="score-display">
@@ -96,8 +125,25 @@ function ScoreDisplay({ result, resume, onUpdateResume, isUpdating }) {
         <div className="recommendations-section">
           <h3>Recommendations for Improvement</h3>
           <ul className="recommendations-list">
-            {result.recommendations_for_improvement?.map((rec, i) => <li key={i}>{rec}</li>)}
+            {result.recommendations_for_improvement?.map((rec, i) => (
+              <li key={i}>
+                {rec}
+                <button onClick={() => handleRemoveRecommendation(i)} className="remove-btn">
+                  &times;
+                </button>
+              </li>
+            ))}
           </ul>
+          <div className="add-recommendation-container">
+            <input
+              type="text"
+              value={newRecommendation}
+              onChange={(e) => setNewRecommendation(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleAddRecommendation()}
+              placeholder="Add a new recommendation"
+            />
+            <button onClick={handleAddRecommendation}>Add</button>
+          </div>
         </div>
 
         <button onClick={onUpdateResume} className="update-resume-button" disabled={isUpdating}>
@@ -107,7 +153,6 @@ function ScoreDisplay({ result, resume, onUpdateResume, isUpdating }) {
     );
   }
 
-  // Default placeholder if neither result nor resume is available
   return <div className="score-display placeholder">Your analysis results will appear here.</div>;
 }
 

@@ -32,27 +32,25 @@ function App() {
     setIsUpdating(true);
     const formData = new FormData();
 
-    // The analysis from the backend doesn't contain the raw resume text.
-     // We need to get it from the chat history or pass it around.
-     // For now, let's assume the analysisResult *does* have the resume text.
-     // If not, we'll need to adjust how we store it after analysis.
-     formData.append('original_resume_text', analysisResult.resume_text); // Assuming resume_text is in analysisResult
-     if (analysisResult.job_description) {
-       formData.append('job_description', analysisResult.job_description);
-     }
-     formData.append('recommendations_for_improvement', JSON.stringify(analysisResult.recommendations_for_improvement));
+    formData.append('original_resume_text', analysisResult.resume_text);
+    if (analysisResult.job_description) {
+      formData.append('job_description', analysisResult.job_description);
+    }
+    formData.append('recommendations_for_improvement', JSON.stringify(analysisResult.recommendations_for_improvement));
 
-     try {
-       const response = await fetch('http://localhost:5000/api/update-resume', {
-         method: 'POST',
-         body: formData,
-       });
-       if (!response.ok) throw new Error('Server responded with an error during resume update!');
-       const data = await response.json();
-       handleResumeGenerated(data); // This will now receive the detailed update response
-     } catch (error) {
-       console.error('Error updating resume:', error);
-       alert('Failed to update resume. Please check the console for details.');
+    try {
+      const response = await fetch('http://localhost:5000/api/update-resume', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) throw new Error('Server responded with an error during resume update!');
+      const data = await response.json();
+      // By setting the generated resume directly, we preserve the original analysis result
+      // so that we can compare the old and new ATS scores.
+      setGeneratedResume(data);
+    } catch (error) {
+      console.error('Error updating resume:', error);
+      alert('Failed to update resume. Please check the console for details.');
     } finally {
       setIsUpdating(false);
     }
@@ -61,10 +59,9 @@ function App() {
   const handleTitleClick = () => {
     setAnalysisResult(null);
     setGeneratedResume(null);
-    // The modal is part of the main app, so we should control its state here.
     setShowOptimizedResume(false);
     setChatHistory([]);
-    setResetChat(prev => prev + 1); // Increment to trigger reset in ChatWindow
+    setResetChat(prev => prev + 1);
   };
 
   return (
@@ -92,6 +89,7 @@ function App() {
               resume={generatedResume} 
               onUpdateResume={handleUpdateResume} 
               isUpdating={isUpdating} 
+              setAnalysisResult={setAnalysisResult}
             />
           ) : (
             <div className="placeholder-results">

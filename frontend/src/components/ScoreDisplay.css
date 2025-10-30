@@ -165,7 +165,6 @@
   cursor: not-allowed;
 }
 
-/* Small loader for buttons */
 .loader.small {
   width: 16px;
   height: 16px;
@@ -194,8 +193,7 @@
    border: 1px solid #eee;
  }
 
-/* Styles for the new detailed report view */
- .detailed-report {
+.detailed-report {
    padding: 30px;
    background-color: #f9f9f9;
  }
@@ -213,29 +211,35 @@
    font-size: 2em;
  }
 
- .score-summary {
-   display: inline-flex;
-   flex-direction: column;
-   align-items: center;
-   gap: 5px;
-   background-color: #fff;
-   padding: 15px 30px;
-   border-radius: 10px;
-   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-   border: 1px solid #eee;
- }
+.score-comparison-container {
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  gap: 40px;
+  margin-bottom: 20px;
+}
 
- .score-label {
-   font-size: 1.1em;
-   font-weight: 600;
-   color: #555;
- }
+.detailed-report .score-summary {
+  flex-grow: 1;
+  max-width: 220px;
+}
 
- .score-number {
-   font-size: 2.8em;
-   font-weight: bold;
-   color: #27ae60; /* Green for success */
- }
+.detailed-report .score-summary.old-score .score-number {
+  color: #7f8c8d;
+  font-size: 2.2em;
+}
+
+.detailed-report .score-summary.old-score .score-label {
+  color: #95a5a6;
+}
+
+.detailed-report .score-summary.new-score .score-number {
+  color: #27ae60;
+}
+
+.detailed-report .score-summary.new-score .score-label {
+  font-weight: bold;
+}
 
  .modifications-section,
  .resume-text-section {
@@ -281,3 +285,54 @@
  .download-button:hover {
    background-color: #229954;
  }
+
+.recommendations-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.remove-btn {
+  background: none;
+  border: none;
+  color: #e74c3c;
+  font-size: 1.2em;
+  cursor: pointer;
+  padding: 0 5px;
+  margin-left: 10px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.remove-btn:hover {
+  opacity: 1;
+}
+
+.add-recommendation-container {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.add-recommendation-container input {
+  flex-grow: 1;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.95em;
+}
+
+.add-recommendation-container button {
+  padding: 8px 15px;
+  background-color: #3498db;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.add-recommendation-container button:hover {
+  background-color: #2980b9;
+}
