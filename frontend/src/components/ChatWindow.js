@@ -5,7 +5,6 @@ function ChatWindow({
   onAnalysisComplete,
   onResumeGenerated,
   resetTrigger,
-  // These props are now correctly passed from App.js
   analysisResult,
   setAnalysisResult,
   handleUpdateResume,
@@ -13,10 +12,12 @@ function ChatWindow({
   setChatHistory,
 }) {
   const [mode, setMode] = useState('analyze');
-  const [resumeFile, setResumeFile] = useState(null); // For initial upload
+  const [resumeFile, setResumeFile] = useState(null);
   const [badgeFiles, setBadgeFiles] = useState([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isAwaitingUserDetails, setIsAwaitingUserDetails] = useState(false);
+  const [jobDescriptionForClarification, setJobDescriptionForClarification] = useState('');
   const fileInputRef = useRef(null);
   const badgeInputRef = useRef(null);
   const textareaRef = useRef(null);
@@ -28,7 +29,9 @@ function ChatWindow({
       setBadgeFiles([]);
       setInputText('');
       setIsLoading(false);
-      setChatHistory([]); // Clear chat history on reset
+      setChatHistory([]);
+      setIsAwaitingUserDetails(false);
+      setJobDescriptionForClarification('');
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
@@ -172,7 +175,7 @@ function ChatWindow({
       alert('Please upload a resume or type a message.');
       return;
     }
-    if (!userMessage && mode === 'generate') {
+    if (!userMessage && mode === 'generate' && !isAwaitingUserDetails) {
       alert('Please describe the resume you want to generate in the message box.');
       return;
     }
@@ -182,7 +185,6 @@ function ChatWindow({
       setInputText('');
       if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
-      // Check for agent interaction only if in analyze mode and analysisResult exists
       if (mode === 'analyze' && analysisResult && handleAgentInteraction(userMessage)) {
         setIsLoading(false);
         return;
@@ -192,6 +194,7 @@ function ChatWindow({
     setIsLoading(true);
 
     const formData = new FormData();
+    let endpoint = 'http://localhost:5000/api/analyze';
 
     if (mode === 'analyze') {
       if (!resumeFile) {
@@ -201,44 +204,51 @@ function ChatWindow({
       }
       formData.append('resume', resumeFile);
       formData.append('job_description', userMessage);
-
-      try {
-        const response = await fetch('http://localhost:5000/api/analyze', {
-          method: 'POST', body: formData,
-        });
-        if (!response.ok) throw new Error('Server responded with an error!');
-        const data = await response.json();
-        onAnalysisComplete(data);
-        setChatHistory(prev => [...prev, { type: 'agent', content: "I've finished analyzing the resume. You can see the report on the right. Feel free to ask for changes, like 'add skill Python' or 'update my resume'." }]);
-      } catch (error) {
-        console.error('Error analyzing resume:', error);
-        alert('Failed to analyze resume. Please check the console for details.');
-      }
     } else { // Generate mode
-      // Corrected FormData keys for generate-resume
-      formData.append('job_description', userMessage);
+      endpoint = 'http://localhost:5000/api/generate-resume';
+      if (isAwaitingUserDetails) {
+        const combinedDescription = `${jobDescriptionForClarification}\n\n--- Personal Details ---\n${userMessage}`;
+        formData.append('job_description', combinedDescription);
+      } else {
+        formData.append('job_description', userMessage);
+      }
+
       if (resumeFile) {
         formData.append('resume', resumeFile);
       }
       badgeFiles.forEach(file => {
         formData.append('badges', file);
       });
-
-      try {
-        const response = await fetch('http://localhost:5000/api/generate-resume', {
-          method: 'POST', body: formData,
-        });
-        if (!response.ok) throw new Error('Server responded with an error!');
-        const data = await response.json();
-        onResumeGenerated(data);
-        setChatHistory(prev => [...prev, { type: 'agent', content: "I've generated a new resume for you. You can see the draft on the right." }]);
-      } catch (error) {
-        console.error('Error generating resume:', error);
-        alert('Failed to generate resume. Please check the console for details.');
-      }
     }
 
-    setIsLoading(false);
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST', body: formData,
+      });
+      if (!response.ok) throw new Error('Server responded with an error!');
+      const data = await response.json();
+
+      if (mode === 'generate' && data.status === 'clarification_needed') {
+        setChatHistory(prev => [...prev, { type: 'agent', content: data.message }]);
+        setIsAwaitingUserDetails(true);
+        setJobDescriptionForClarification(userMessage);
+      } else {
+        if (mode === 'analyze') {
+          onAnalysisComplete(data);
+          setChatHistory(prev => [...prev, { type: 'agent', content: "I've finished analyzing the resume. You can see the report on the right. Feel free to ask for changes, like 'add skill Python' or 'update my resume'." }]);
+        } else {
+          onResumeGenerated(data);
+          setChatHistory(prev => [...prev, { type: 'agent', content: "I've generated a new resume for you. You can see the draft on the right." }]);
+        }
+        setIsAwaitingUserDetails(false);
+        setJobDescriptionForClarification('');
+      }
+    } catch (error) {
+      console.error(`Error in ${mode} mode:`, error);
+      alert(`Failed to ${mode} resume. Please check the console for details.`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleModeChange = (newMode) => {
@@ -258,6 +268,8 @@ function ChatWindow({
           <div className="placeholder-text">
             {mode === 'analyze'
               ? "Use the '+' to upload your resume, paste a job description, and hit send."
+              : isAwaitingUserDetails
+              ? "Please provide your personal details as requested above."
               : "Describe the resume you want, optionally add a base resume (+) or badges (🎖️), and hit send."
             }
           </div>
@@ -296,7 +308,7 @@ function ChatWindow({
           <textarea
             ref={textareaRef}
             className="message-input"
-            placeholder={mode === 'analyze' ? 'Paste job description here (optional)..' : 'Describe the resume you want...'}
+            placeholder={mode === 'analyze' ? 'Paste job description here (optional)..' : isAwaitingUserDetails ? 'Enter your personal details here...' : 'Describe the resume you want...'}
             value={inputText}
             onChange={handleTextChange}
             rows="1"

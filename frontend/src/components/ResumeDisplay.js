@@ -8,7 +8,8 @@ function ResumeDisplay({ resume }) {
 
   const cleanContentForDisplay = (text) => {
     if (!text) return '';
-    const textWithMarkersRemoved = text.replace(/\[.*?\]/g, '');
+    // Remove markdown-style bolding (e.g., **text**) and other markers
+    const textWithMarkersRemoved = text.replace(/\[.*?\]/g, '').replace(/\*\*/g, '');
     const cleanLines = textWithMarkersRemoved
       .split('\n')
       .map(line => line.trim())

@@ -148,7 +148,10 @@ def create_comprehensive_generation_prompt(
 
     **Instructions:**
     1.  **Analyze Inputs:** Review all provided sections: Job Description, Skills, User Details, and Existing Resume.
-    2.  **Check for Completeness:** If `user_details` are missing but other information (`jd_text`, `skills`, or `existing_resume_text`) is present, you MUST ask for them.
+    2.   **Check for Completeness:** Before generating a resume, you MUST determine if you have sufficient personal details (like name, email, experience).
+         -   First, look for these details within the `user_details` field.
+         -   If that is empty, carefully scan the `jd_text` and `existing_resume_text` fields for any personal information.
+         -   Only if you cannot find sufficient personal details in ANY of the provided text fields should you ask for clarification.
     3.  **Generate or Update:**
         - If `existing_resume_text` is provided, update it to align with the `jd_text` and `skills`.
         - If not, create a new resume from scratch using `jd_text`, `skills`, and `user_details`.

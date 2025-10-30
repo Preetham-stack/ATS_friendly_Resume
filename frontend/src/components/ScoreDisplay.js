@@ -5,7 +5,9 @@ function ScoreDisplay({ result, resume, onUpdateResume, isUpdating, setAnalysisR
   const [newRecommendation, setNewRecommendation] = useState('');
 
   const cleanTextForPreview = (text) => {
-    return text.replace(/\[H1\]|\[H2\]|\[H3\]|\[BULLET\]/g, '').trim();
+    if (!text) return '';
+    // Remove markdown-style bolding (e.g., **text**) and other markers
+    return text.replace(/\[H1\]|\[H2\]|\[H3\]|\[BULLET\]/g, '').replace(/\*\*/g, '').trim();
   };
 
   const handleRemoveRecommendation = (indexToRemove) => {
@@ -34,6 +36,13 @@ function ScoreDisplay({ result, resume, onUpdateResume, isUpdating, setAnalysisR
   const isDetailedResumeResponse = resume && typeof resume === 'object' && resume.optimized_resume_text;
 
   if (isDetailedResumeResponse) {
+    // Ensure modifications_made is an array
+    const modifications = Array.isArray(resume.modifications_made)
+      ? resume.modifications_made
+      : typeof resume.modifications_made === 'string'
+      ? resume.modifications_made.split('\n').filter(mod => mod.trim() !== '')
+      : [];
+
     return (
       <div className="resume-display-container detailed-report">
         <div className="report-header">
@@ -55,7 +64,7 @@ function ScoreDisplay({ result, resume, onUpdateResume, isUpdating, setAnalysisR
         <div className="modifications-section">
           <h3>Modifications Made</h3>
           <ul className="modifications-list">
-            {resume.modifications_made?.map((mod, index) => (
+            {modifications.map((mod, index) => (
               <li key={index}>{mod}</li>
             ))}
           </ul>
