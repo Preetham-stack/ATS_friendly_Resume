@@ -173,3 +173,111 @@
   border-top-color: white;
   margin: 0 auto;
 }
+
+.resume-display-container {
+   padding: 20px;
+   background-color: #fff;
+   height: 100%;
+   overflow-y: auto;
+ }
+
+ .resume-content {
+   white-space: pre-wrap;
+   word-wrap: break-word;
+   font-family: 'Courier New', Courier, monospace;
+   font-size: 14px;
+   line-height: 1.6;
+   color: #333;
+   background-color: #fdfdfd;
+   padding: 15px;
+   border-radius: 4px;
+   border: 1px solid #eee;
+ }
+
+/* Styles for the new detailed report view */
+ .detailed-report {
+   padding: 30px;
+   background-color: #f9f9f9;
+ }
+
+ .report-header {
+   text-align: center;
+   margin-bottom: 30px;
+   padding-bottom: 20px;
+   border-bottom: 1px solid #e0e0e0;
+ }
+
+ .report-header h2 {
+   margin: 0 0 20px 0;
+   color: #2c3e50;
+   font-size: 2em;
+ }
+
+ .score-summary {
+   display: inline-flex;
+   flex-direction: column;
+   align-items: center;
+   gap: 5px;
+   background-color: #fff;
+   padding: 15px 30px;
+   border-radius: 10px;
+   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+   border: 1px solid #eee;
+ }
+
+ .score-label {
+   font-size: 1.1em;
+   font-weight: 600;
+   color: #555;
+ }
+
+ .score-number {
+   font-size: 2.8em;
+   font-weight: bold;
+   color: #27ae60; /* Green for success */
+ }
+
+ .modifications-section,
+ .resume-text-section {
+   background-color: #fff;
+   padding: 25px;
+   border-radius: 8px;
+   margin-bottom: 30px;
+   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+ }
+
+ .modifications-section h3,
+ .resume-text-section h3 {
+   margin-top: 0;
+   color: #3498db;
+   border-bottom: 1px solid #eee;
+   padding-bottom: 10px;
+   margin-bottom: 15px;
+ }
+
+ .modifications-list {
+   list-style-type: disc;
+   padding-left: 20px;
+ }
+
+ .modifications-list li {
+   margin-bottom: 12px;
+   line-height: 1.5;
+   color: #444;
+ }
+
+ .download-button {
+   display: inline-block;
+   margin-bottom: 20px;
+   padding: 10px 20px;
+   background-color: #27ae60;
+   color: white;
+   text-decoration: none;
+   border-radius: 5px;
+   font-weight: bold;
+   transition: background-color 0.2s;
+ }
+
+ .download-button:hover {
+   background-color: #229954;
+ }
