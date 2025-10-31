@@ -36,7 +36,11 @@ function App() {
     if (analysisResult.job_description) {
       formData.append('job_description', analysisResult.job_description);
     }
+    if (analysisResult.original_filename) {
+       formData.append('original_filename', analysisResult.original_filename);
+    }
     formData.append('recommendations_for_improvement', JSON.stringify(analysisResult.recommendations_for_improvement));
+    formData.append('initial_ats_score', analysisResult.ats_score_estimation);
 
     try {
       const response = await fetch('http://localhost:5000/api/update-resume', {

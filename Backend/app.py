@@ -77,20 +77,14 @@ def parse_resume_text(filepath: str) -> str:
             return ""
     return ""
 
-def create_optimization_prompt(resume_text: str, jd_text: str, recommendations: str) -> str:
+def create_optimization_prompt(resume_text: str, jd_text: str, recommendations: str, initial_score: int) -> str:
     return f'''
-    You are an expert ATS Optimization AI. Analyze the provided resume and job description, then rewrite the resume
-    to maximize its ATS score (target score: 85+).
+    You are an expert ATS Optimization AI. Your task is to first rewrite a resume to align with a job description, and then critically evaluate your own work to provide a realistic ATS score.
 
-    Incorporate the following specific recommendations for improvement:
-    {recommendations}
-
-    **Formatting Instructions:**
-    The `optimized_resume_text` MUST use these special format markers:
-    - [H1] for the person's name
-    - [H2] for major sections (e.g., PROFILE, PROFESSIONAL EXPERIENCE, SKILLS, EDUCATION)
-    - [H3] for job titles or sub-sections
-    - [BULLET] for bullet points under experience or other sections
+    **Process:**
+    1.  **Rewrite:** Analyze the provided resume and job description. Rewrite the resume to maximize its alignment with the job description, incorporating the specific recommendations for improvement: {recommendations}
+    2.  **Format:** The `optimized_resume_text` MUST use the special format markers: [H1], [H2], [H3], [BULLET].
+    3.  **Self-Critique and Score:** After rewriting, critically analyze the `optimized_resume_text` against the `Job Description`. Calculate a realistic `ats_score`. This new score MUST be greater than the initial analysis score, which was {initial_score}.
 
     Return a **valid JSON only**, with this structure:
     {{
@@ -206,6 +200,55 @@ def get_gemini_response(prompt: str) -> dict:
         print(f"Problematic response text: {problematic_text}")
         return {"error": f"Failed to parse Gemini response: {e}"}
 
+def create_docx_from_text(text_content: str, output_filepath: str):
+    """Creates a formatted .docx file from text with special markers."""
+    doc = Document()
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'Calibri'
+    font.size = Pt(11)
+    
+    paragraph_format = style.paragraph_format
+    paragraph_format.space_before = Pt(0)
+    paragraph_format.space_after = Pt(6)
+
+    for line in text_content.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+
+        if line.startswith('[H1]'):
+            text = line.replace('[H1]', '').strip()
+            p = doc.add_paragraph()
+            run = p.add_run(text)
+            run.bold = True
+            run.font.size = Pt(18)
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p.paragraph_format.space_after = Pt(12)
+        elif line.startswith('[H2]'):
+            text = line.replace('[H2]', '').strip()
+            p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(12)
+            p.paragraph_format.space_after = Pt(4)
+            run = p.add_run(text)
+            run.bold = True
+            run.font.size = Pt(14)
+        elif line.startswith('[H3]'):
+            text = line.replace('[H3]', '').strip()
+            p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(8)
+            p.paragraph_format.space_after = Pt(2)
+            run = p.add_run(text)
+            run.bold = True
+            run.font.size = Pt(12)
+        elif line.startswith('[BULLET]'):
+            text = line.replace('[BULLET]', '').strip()
+            doc.add_paragraph(text, style='List Bullet')
+        else:
+            doc.add_paragraph(line)
+            
+    doc.save(output_filepath)
+
 
 # --- API Endpoints ---
 @app.route('/api/analyze', methods=['POST'])
@@ -236,6 +279,7 @@ def analyze_resume_endpoint():
     # Add the original resume and JD text to the response for later use by the frontend
     ai_response['resume_text'] = resume_text
     ai_response['job_description'] = job_description
+    ai_response['original_filename'] = file.filename  # Add original filename to the response
 
     return jsonify(ai_response)
 
@@ -248,83 +292,26 @@ def update_resume_endpoint():
     resume_text = request.form.get('original_resume_text')
     job_description = request.form.get('job_description', '')
     recommendations = request.form.get('recommendations_for_improvement', '')
+    original_filename = request.form.get('original_filename', 'resume.docx')
+    initial_ats_score = request.form.get('initial_ats_score', 0, type=int)
 
     if not resume_text:
         return jsonify({'error': 'Original resume text not provided.'}), 400
 
-    prompt = create_optimization_prompt(resume_text, job_description, recommendations)
+    prompt = create_optimization_prompt(resume_text, job_description, recommendations, initial_ats_score)
     ai_response = get_gemini_response(prompt)
 
     if "error" in ai_response:
         return jsonify(ai_response), 500
     
-    
-
-    # Create a unique filename for the downloadable doc
-    import time
-    timestamp = int(time.time())
-    optimized_filename = f"Optimized_Resume_{timestamp}.docx"
+    # Create a filename based on the original uploaded file's name
+    base_name = original_filename.rsplit('.', 1)[0]
+    secure_base_name = secure_filename(base_name)
+    optimized_filename = f"updated_{secure_base_name}.docx"
     optimized_filepath = os.path.join(app.config['UPLOAD_FOLDER'], optimized_filename)
     
-    doc = Document()
-    style = doc.styles['Normal']
-    font = style.font
-    font.name = 'Calibri'
-    font.size = Pt(11)
-    
-    # Set default paragraph spacing for the document
-    paragraph_format = style.paragraph_format
-    paragraph_format.space_before = Pt(0)
-    paragraph_format.space_after = Pt(6)
-
     optimized_text = ai_response.get("optimized_resume_text", "")
-
-    # Parse the structured text to create a formatted Word document
-    for line in optimized_text.split('\n'):
-        line = line.strip()
-        if not line:
-            continue
-
-        if line.startswith('[H1]'):
-            text = line.replace('[H1]', '').strip()
-            p = doc.add_paragraph()
-            run = p.add_run(text)
-            run.bold = True
-            run.font.size = Pt(18)
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            p.paragraph_format.space_after = Pt(12)
-        elif line.startswith('[H2]'):
-            text = line.replace('[H2]', '').strip()
-            p = doc.add_paragraph()
-            p.paragraph_format.space_before = Pt(12)
-            p.paragraph_format.space_after = Pt(4)
-            run = p.add_run(text)
-            run.bold = True
-            run.font.size = Pt(14)
-            # Optional: Add a bottom border to H2 sections
-            # from docx.oxml.ns import qn
-            # from docx.oxml import OxmlElement
-            # pPr = p._p.get_or_add_pPr()
-            # pBdr = OxmlElement('w:pBdr')
-            # bottom = OxmlElement('w:bottom')
-            # bottom.set(qn('w:val'), 'single')
-            # pBdr.append(bottom)
-            # pPr.append(pBdr)
-        elif line.startswith('[H3]'):
-            text = line.replace('[H3]', '').strip()
-            p = doc.add_paragraph()
-            p.paragraph_format.space_before = Pt(8)
-            p.paragraph_format.space_after = Pt(2)
-            run = p.add_run(text)
-            run.bold = True
-            run.font.size = Pt(12)
-        elif line.startswith('[BULLET]'):
-            text = line.replace('[BULLET]', '').strip()
-            doc.add_paragraph(text, style='List Bullet')
-        else:
-            doc.add_paragraph(line)
-
-    doc.save(optimized_filepath)
+    create_docx_from_text(optimized_text, optimized_filepath)
 
     ai_response['download_path'] = f"/uploads/{optimized_filename}"
     return jsonify(ai_response)
@@ -339,12 +326,14 @@ def generate_resume_endpoint():
     jd_text = request.form.get('job_description', '')
     skills = request.form.get('skills', '')
     user_details = request.form.get('user_details', '')
+    prompt_text = request.form.get('prompt', '') # From frontend's generate mode
     resume_file = request.files.get('resume')
     badge_files = request.files.getlist('badges')
-    image_files = request.files.getlist('images') # For profile pics or other attachments
 
     existing_resume_text = ""
+    original_filename = ""
     if resume_file and allowed_file(resume_file.filename):
+        original_filename = resume_file.filename
         filename = secure_filename(resume_file.filename)
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         resume_file.save(filepath)
@@ -352,7 +341,7 @@ def generate_resume_endpoint():
 
     # --- Call the new comprehensive prompt ---
     prompt = create_comprehensive_generation_prompt(
-        jd_text=jd_text,
+        jd_text=jd_text or prompt_text, # Use prompt_text if jd_text is empty
         skills=skills,
         user_details=user_details,
         existing_resume_text=existing_resume_text
@@ -367,64 +356,14 @@ def generate_resume_endpoint():
         return jsonify(ai_response)
 
     generated_text = ai_response.get("generated_resume_text", "")
-    generated_skills = ai_response.get("extracted_skills", [])
-
-    doc = Document()
-    style = doc.styles['Normal']
-    font = style.font
-    font.name = 'Calibri'
-    font.size = Pt(11)
-
-    # Add badges on top-right
-    if badge_files:
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        # Also consider badges from the original resume if it was an update
-        for bf in badge_files: 
-            if bf and allowed_file(bf.filename):
-                badge_filename = secure_filename(bf.filename)
-                badge_path = os.path.join(app.config['UPLOAD_FOLDER'], badge_filename)
-                bf.save(badge_path)
-                try:
-                    p.add_run().add_picture(badge_path, height=Inches(0.6))
-                    p.add_run(" ")
-                except Exception as e:
-                    print(f"Error adding badge {badge_filename}: {e}")
-
-    # Parse structured resume content
-    for line in generated_text.split('\n'):
-        line = line.strip()
-        if not line:
-            continue
-
-        if line.startswith('[H1]'):
-            text = line.replace('[H1]', '').strip()
-            p = doc.add_paragraph()
-            run = p.add_run(text)
-            run.bold = True
-            run.font.size = Pt(16)
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        elif line.startswith('[H2]'):
-            text = line.replace('[H2]', '').strip()
-            doc.add_paragraph()  # spacing
-            p = doc.add_paragraph()
-            run = p.add_run(text)
-            run.bold = True
-            run.font.size = Pt(14)
-        elif line.startswith('[H3]'):
-            text = line.replace('[H3]', '').strip()
-            p = doc.add_paragraph()
-            run = p.add_run(text)
-            run.bold = True
-        elif line.startswith('[BULLET]'):
-            text = line.replace('[BULLET]', '').strip()
-            doc.add_paragraph(text, style='List Bullet')
-        else:
-            doc.add_paragraph(line)
-
-    generated_filename = "Generated_Resume.docx"
+    
+    # Create a filename based on the original file if available, otherwise use a generic name
+    base_name = original_filename.rsplit('.', 1)[0] if original_filename else "resume"
+    secure_base_name = secure_filename(base_name)
+    generated_filename = f"generated_{secure_base_name}.docx"
     generated_filepath = os.path.join(app.config['UPLOAD_FOLDER'], generated_filename)
-    doc.save(generated_filepath)
+    
+    create_docx_from_text(generated_text, generated_filepath)
 
     # Add download path and other relevant info to the original AI response
     ai_response['download_path'] = f"/uploads/{generated_filename}"
