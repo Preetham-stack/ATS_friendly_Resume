@@ -22,6 +22,7 @@
 
 .header-right {
   justify-content: flex-end;
+  gap: 20px; /* Add some space between the name and the button */
 }
 
 .app-header h1 {
@@ -37,4 +38,25 @@
 
 .icon:hover {
   color: #1abc9c;
+}
+
+.profile-name {
+  font-weight: 500;
+  font-size: 1.05em;
+}
+
+.sign-out-button {
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.95em;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.sign-out-button:hover {
+  background-color: #c0392b;
 }

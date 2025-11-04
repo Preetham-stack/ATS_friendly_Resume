@@ -18,6 +18,7 @@ function ChatWindow({
   const [isLoading, setIsLoading] = useState(false);
   const [isAwaitingUserDetails, setIsAwaitingUserDetails] = useState(false);
   const [jobDescriptionForClarification, setJobDescriptionForClarification] = useState('');
+  const [lastJobDescription, setLastJobDescription] = useState(''); // Store the last JD
   const fileInputRef = useRef(null);
   const badgeInputRef = useRef(null);
   const textareaRef = useRef(null);
@@ -32,6 +33,7 @@ function ChatWindow({
       setChatHistory([]);
       setIsAwaitingUserDetails(false);
       setJobDescriptionForClarification('');
+      setLastJobDescription('');
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
@@ -87,6 +89,21 @@ function ChatWindow({
 
   const handleAgentInteraction = (text) => {
     const lowercasedText = text.toLowerCase();
+
+    // Intent detection for using the previous JD
+    const hasJDReference = lowercasedText.includes('jd') || lowercasedText.includes('job description');
+    const hasPreviousReference = lowercasedText.includes('previous') || lowercasedText.includes('above') || lowercasedText.includes('last') || lowercasedText.includes('same');
+    const hasActionReference = lowercasedText.includes('use') || lowercasedText.includes('update') || lowercasedText.includes('work with');
+
+    if (hasJDReference && hasPreviousReference && (hasActionReference || resumeFile)) {
+      if (lastJobDescription) {
+        setChatHistory(prev => [...prev, { type: 'agent', content: "Sure, I can do that. I'll use the previous job description for the analysis." }]);
+        return 'USE_PREVIOUS_JD';
+      } else {
+        setChatHistory(prev => [...prev, { type: 'agent', content: "I don't have a previous job description to use. Please provide one." }]);
+        return true; // Block submission
+      }
+    }
 
     if (!analysisResult && (lowercasedText.startsWith('add') || lowercasedText.startsWith('remove') || lowercasedText.includes('update'))) {
       setChatHistory(prev => [...prev, { type: 'agent', content: "I can do that, but you need to analyze a resume first. Please upload a resume and job description." }]);
@@ -171,7 +188,23 @@ function ChatWindow({
     event.preventDefault();
 
     const userMessage = inputText.trim();
-    if (!userMessage && !resumeFile && mode === 'analyze') {
+    let usePreviousJD = false;
+
+    if (userMessage) {
+      setChatHistory(prev => [...prev, { type: 'user', content: userMessage }]);
+      setInputText('');
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+
+      const agentResponse = handleAgentInteraction(userMessage);
+      if (agentResponse === 'USE_PREVIOUS_JD') {
+        usePreviousJD = true;
+      } else if (agentResponse) {
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    if (!userMessage && !resumeFile && mode === 'analyze' && !usePreviousJD) {
       alert('Please upload a resume or type a message.');
       return;
     }
@@ -180,21 +213,15 @@ function ChatWindow({
       return;
     }
 
-    if (userMessage) {
-      setChatHistory(prev => [...prev, { type: 'user', content: userMessage }]);
-      setInputText('');
-      if (textareaRef.current) textareaRef.current.style.height = 'auto';
-
-      if (mode === 'analyze' && analysisResult && handleAgentInteraction(userMessage)) {
-        setIsLoading(false);
-        return;
-      }
-    }
-
     setIsLoading(true);
 
     const formData = new FormData();
     let endpoint = 'http://localhost:5000/api/analyze';
+    let jdToUse = userMessage;
+
+    if (usePreviousJD) {
+      jdToUse = lastJobDescription;
+    }
 
     if (mode === 'analyze') {
       if (!resumeFile) {
@@ -203,14 +230,15 @@ function ChatWindow({
         return;
       }
       formData.append('resume', resumeFile);
-      formData.append('job_description', userMessage);
+      formData.append('job_description', jdToUse);
+      setLastJobDescription(jdToUse); // Save the JD for future use
     } else { // Generate mode
       endpoint = 'http://localhost:5000/api/generate-resume';
       if (isAwaitingUserDetails) {
         const combinedDescription = `${jobDescriptionForClarification}\n\n--- Personal Details ---\n${userMessage}`;
         formData.append('job_description', combinedDescription);
       } else {
-        formData.append('job_description', userMessage);
+        formData.append('job_description', jdToUse);
       }
 
       if (resumeFile) {
@@ -231,7 +259,7 @@ function ChatWindow({
       if (mode === 'generate' && data.status === 'clarification_needed') {
         setChatHistory(prev => [...prev, { type: 'agent', content: data.message }]);
         setIsAwaitingUserDetails(true);
-        setJobDescriptionForClarification(userMessage);
+        setJobDescriptionForClarification(jdToUse);
       } else {
         if (mode === 'analyze') {
           onAnalysisComplete(data);
