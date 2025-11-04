@@ -46,6 +46,21 @@ function ChatWindow({
     }
   }, [chatHistory]);
 
+  useEffect(() => {
+    // Display a welcome message when the mode changes and the chat is empty
+    if (chatHistory.length === 0) {
+      if (mode === 'analyze') {
+        setChatHistory([
+          { type: 'agent', content: 'Meet JDMatch — the AI that reads your JD, reviews your resume, and makes it job-ready in seconds.' },
+        ]);
+      } else if (mode === 'generate') {
+        setChatHistory([
+          { type: 'agent', content: 'Meet JDMatch — No resume? No problem. Share your JD or details, and I’ll craft a fresh, job-ready resume for you.' },
+        ]);
+      }
+    }
+  }, [mode]);
+
   const handleFileChange = (event) => {
     const file = event.target.files[0];
     if (file) {
@@ -281,6 +296,7 @@ function ChatWindow({
 
   const handleModeChange = (newMode) => {
     setMode(newMode);
+    setChatHistory([]); // Clear chat history when mode changes
   };
 
   return (

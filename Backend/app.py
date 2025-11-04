@@ -84,7 +84,7 @@ def create_optimization_prompt(resume_text: str, jd_text: str, recommendations: 
     **Process:**
     1.  **Rewrite:** Analyze the provided resume and job description. Rewrite the resume to maximize its alignment with the job description, incorporating the specific recommendations for improvement: {recommendations}
     2.  **Format:** The `optimized_resume_text` MUST use the special format markers: [H1], [H2], [H3], [BULLET].
-    3.  **Self-Critique and Score:** After rewriting, critically analyze the `optimized_resume_text` against the `Job Description`. Calculate a realistic `ats_score`. This new score MUST be greater than the initial analysis score, which was {initial_score}.
+    3.  **Self-Critique and Score:** After rewriting, critically analyze the `optimized_resume_text` against the `Job Description`. Calculate a realistic `ats_score`. This new score MUST be greater than the initial analysis score (which was {initial_score}) and should ideally be **above 85**.
 
     Return a **valid JSON only**, with this structure:
     {{
@@ -107,13 +107,30 @@ def create_analysis_prompt(resume_text: str, jd_text: str) -> str:
     You are an expert ATS Analyzer AI. Your task is to analyze the resume against the provided job description.
     Do NOT rewrite the resume. Instead, identify what's missing and compare the skills.
 
-    1. Extract all technical skills, tools, and keywords from the Job Description.
-    2. Extract all technical skills and tools from the Resume.
-    3. Calculate a skills matching score as a percentage based on how many skills from the job description are present in the resume.
+    **Analysis and Scoring Process:**
+     1.  **Analyze Content:** First, extract all relevant skills, keywords, and experience from both the Job Description and the Resume.
+     2.  **Calculate Overall Score:** Based on the criteria below, calculate an overall `ats_score_estimation`.
+     3.  **Calculate Score Breakdown:** Provide a score (out of 100) for each of the six criteria.
+ 
+     **ATS Score Calculation Criteria:**
+     -   **Keyword Match:** How well do the resume keywords align with the job description?
+     -   **Skills Relevance:** Are the required technical and soft skills present and relevant?
+     -   **Experience Match:** Do the job titles, responsibilities, and years of experience align with the job requirements?
+     -   **Action & Impact Language:** Does the resume use strong action verbs and quantifiable, measurable achievements (e.g., "increased efficiency by 15%")?
+     -   **Education & Certifications:** Do the educational qualifications and certifications meet the job requirements?
+     -   **Resume Format & Readability:** Is the resume format clean, professional, and easily parsable (e.g., standard headings, no tables/columns)?
 
     Return a **valid JSON only**, with this structure:
     {{
       "ats_score_estimation": <integer>,
+      "score_breakdown": {{
+         "keyword_match": <integer>,
+         "skills_relevance": <integer>,
+         "experience_match": <integer>,
+         "action_impact_language": <integer>,
+         "education_certifications": <integer>,
+         "format_readability": <integer>
+       }},
       "skills_matching_score": <integer>,
       "missing_keywords": ["<string>", ...],
       "feedback": "<string>",
@@ -154,7 +171,7 @@ def create_comprehensive_generation_prompt(
     - [H2] for major sections (Summary, Experience, Education)
     - [H3] for job titles or sub-sections
     - [BULLET] for bullet points
-    5.  **Calculate ATS Score:** Provide an estimated ATS score for the final generated/updated resume against the job description.
+    5.  **Calculate ATS Score:** Provide an estimated ATS score for the final generated/updated resume against the job description. This score should ideally be **above 85**.
     6.  **Return JSON:** Your entire output must be a single, valid JSON object.
 
     **Response Scenarios:**
